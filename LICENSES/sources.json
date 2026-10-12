@@ -1,0 +1,32 @@
+[
+  {
+    "file": "LICENSES/hunspell-en.txt",
+    "source": "https://raw.githubusercontent.com/wooorm/dictionaries/main/dictionaries/en/license",
+    "sha256": "2a7e8d8ae9e8facc84818546ae2a8d83aec5e9c80a675ff789acd1c338b53b3d",
+    "retrieved": "2026-10-12"
+  },
+  {
+    "file": "LICENSES/hunspell-ru.txt",
+    "source": "https://raw.githubusercontent.com/wooorm/dictionaries/main/dictionaries/ru/license",
+    "sha256": "262af2f6ad70a61e5ee1332ff44fa8ee50edca819cf33207d8ad6ba6a0c9be52",
+    "retrieved": "2026-10-12"
+  },
+  {
+    "file": "LICENSES/GPL-3.0.txt",
+    "source": "https://raw.githubusercontent.com/wooorm/dictionaries/main/dictionaries/uk/license",
+    "sha256": "d62f065830aa3739cc031156b9690805c7b2e811b4a178c8b4acd8725d561c94",
+    "retrieved": "2026-10-12"
+  },
+  {
+    "file": "LICENSES/FrequencyWords-MIT.txt",
+    "source": "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/LICENSE",
+    "sha256": "e08d916cc953f85f7dfa0df530f6d7931f14ce804d053602662d8649b5fac829",
+    "retrieved": "2026-10-12"
+  },
+  {
+    "file": "LICENSES/CC-BY-SA-4.0.txt",
+    "source": "https://creativecommons.org/licenses/by-sa/4.0/legalcode.txt",
+    "sha256": "28a9529c7d0bb4dc51f4bf5c116a3d16ef247a052f7591466768ddf563fd1cf5",
+    "retrieved": "2026-10-12"
+  }
+]
