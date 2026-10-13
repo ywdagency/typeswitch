@@ -2,9 +2,7 @@
 
 TypeSwitch requires macOS 15 or newer. Release DMGs contain a universal app for Apple silicon and Intel Macs; Xcode and Python are not needed to run it.
 
-**Release status:** no notarized binary release has been published yet. Until a signed release is available, use the local source build described in the repository README. Files marked `preview` are ad-hoc signed packaging checks, not public installation releases.
-
-When a signed release is available, download the `.dmg` from [GitHub Releases](https://github.com/ywdagency/typeswitch/releases). Open the disk image and drag **TypeSwitch.app** onto **Applications**. Eject the image, then open TypeSwitch from Applications. The app runs in the menu bar.
+Use the signed, notarized `.dmg` from [GitHub Releases](https://github.com/ywdagency/typeswitch/releases). Open the disk image and drag **TypeSwitch.app** onto **Applications**. Eject the image, then open TypeSwitch from Applications. The app runs in the menu bar. Public release availability is recorded in the repository README; files marked `preview` are ad-hoc signed packaging checks rather than installation releases.
 
 In TypeSwitch Settings → General, use **Enable…** for **Input Monitoring** and **Accessibility**, then grant the requested access in System Settings → Privacy & Security. Return to TypeSwitch so it can refresh permission status. If macOS does not list the app, use **Show TypeSwitch in Finder** and add that installed copy with `+` in the matching permission pane. A restart may be required if macOS requests one. These permissions must be granted by the user.
 

@@ -13,6 +13,11 @@ on:
         required: true
         default: '1'
         type: string
+      update_draft:
+        description: 'Replace assets in an existing unpublished draft (increase the build number)'
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -31,6 +36,7 @@ jobs:
     env:
       RELEASE_VERSION: ${{ inputs.version }}
       RELEASE_BUILD: ${{ inputs.build_number }}
+      UPDATE_DRAFT: ${{ inputs.update_draft }}
       NOTARYTOOL_PROFILE: typeswitch-release
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -49,10 +55,14 @@ jobs:
             echo 'Release tag already exists.' >&2
             exit 1
           fi
-          # Any existing release also prevents replacing its assets on a retry.
-          gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq '.[].tag_name' > "$RUNNER_TEMP/release-tags"
-          if grep -Fxq "v$RELEASE_VERSION" "$RUNNER_TEMP/release-tags"; then
-            echo 'Release already exists.' >&2
+          is_draft="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq ".[] | select(.tag_name == \"v$RELEASE_VERSION\") | .draft")"
+          if [[ "$UPDATE_DRAFT" == true ]]; then
+            if [[ "$is_draft" != true ]]; then
+              echo 'Only an existing unpublished draft can be updated.' >&2
+              exit 1
+            fi
+          elif [[ -n "$is_draft" ]]; then
+            echo 'Release already exists. Explicitly select update_draft to replace an unpublished draft.' >&2
             exit 1
           fi
       - name: Verify source
@@ -107,17 +117,31 @@ jobs:
         env:
           CODE_SIGN_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
         run: ./scripts/build-release.sh "$RELEASE_VERSION" "$RELEASE_BUILD"
+      - name: Verify packaged release
+        run: python3 scripts/verify-dmg.py "dist/TypeSwitch-$RELEASE_VERSION-macOS-universal.dmg" --version "$RELEASE_VERSION" --build-number "$RELEASE_BUILD"
       - name: Create draft prerelease
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release create "v$RELEASE_VERSION" \
-            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --draft --prerelease --title "TypeSwitch $RELEASE_VERSION" \
-            --notes-file "docs/releases/$RELEASE_VERSION.md" \
-            "dist/TypeSwitch-$RELEASE_VERSION-macOS-universal.dmg" \
-            "dist/TypeSwitch-$RELEASE_VERSION-macOS-universal.dmg.sha256"
+          if [[ "$UPDATE_DRAFT" == true ]]; then
+            # Repeat the publication checks after notarization, which can take a long time.
+            test "$(gh release view "v$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+            test -z "$(git ls-remote --tags origin "refs/tags/v$RELEASE_VERSION")"
+            gh release upload "v$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --clobber \
+              "dist/TypeSwitch-$RELEASE_VERSION-macOS-universal.dmg" \
+              "dist/TypeSwitch-$RELEASE_VERSION-macOS-universal.dmg.sha256"
+            gh release edit "v$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" --title "TypeSwitch $RELEASE_VERSION" \
+              --notes-file "docs/releases/$RELEASE_VERSION.md"
+          else
+            gh release create "v$RELEASE_VERSION" \
+              --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --draft --prerelease --title "TypeSwitch $RELEASE_VERSION" \
+              --notes-file "docs/releases/$RELEASE_VERSION.md" \
+              "dist/TypeSwitch-$RELEASE_VERSION-macOS-universal.dmg" \
+              "dist/TypeSwitch-$RELEASE_VERSION-macOS-universal.dmg.sha256"
+          fi
       - name: Remove signing credentials
         if: always()
         env:

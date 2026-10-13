@@ -12,6 +12,8 @@
 
 ### Changed
 
+- Verify release DMG contents, source revision, resources, license notices, signatures, and notarization before uploading assets. CI also builds and checks an ad-hoc universal image. Allow explicit updates of unpublished draft candidates while refusing existing tags and published releases; refresh installation instructions for signed builds.
+
 - Prepare universal macOS DMGs with bundled license notices, checksums, installation instructions, and a manually triggered GitHub draft release workflow requiring Developer ID signing and notarization. Local preview packaging is available without release credentials; no notarized binary has been published yet.
 
 - Replace immediate Backspace undo with Esc, preserving the delimiter and restoring the source layout. Continued input and context changes cancel the opportunity.

@@ -5,11 +5,11 @@
 A native macOS menu bar utility that corrects words typed with the wrong keyboard layout. Built with Swift 6, SwiftUI, AppKit, CoreGraphics, and Accessibility APIs, with all text processing on the Mac.
 
 > [!WARNING]
-> Experimental developer preview. Automated tests cover the core logic and simulated text controls; the manual cross-app compatibility matrix is incomplete. Do not rely on it for important text. This repository distributes source, not a notarized application release.
+> Experimental developer preview. Automated tests cover the core logic and simulated text controls; the manual cross-app compatibility matrix is incomplete. Do not rely on it for important text. A signed, notarized release candidate is being tested as a private draft; no binary release has been published yet.
 
 ## Installation
 
-The release workflow prepares signed DMGs for [GitHub Releases](https://github.com/ywdagency/typeswitch/releases), with a universal app for Apple silicon and Intel Macs running macOS 15 or newer. No notarized binary release is available yet; use the local source build below for now. Once published, installation is opening the DMG, dragging TypeSwitch into Applications, and granting Input Monitoring and Accessibility. See [installation notes](docs/installation.md) and the [release preparation workflow](docs/distribution.md).
+The release workflow prepares signed DMGs for [GitHub Releases](https://github.com/ywdagency/typeswitch/releases), with a universal app for Apple silicon and Intel Macs running macOS 15 or newer. The 0.1.0 release candidate passed Developer ID signing, Apple notarization, and Gatekeeper checks and remains an unpublished draft. Until publication, use the local source build below. Installation from a release DMG is dragging TypeSwitch into Applications and granting Input Monitoring and Accessibility. See [installation notes](docs/installation.md) and the [release preparation workflow](docs/distribution.md).
 
 ## What it does
 
@@ -50,7 +50,7 @@ swift test
 python3 -m unittest discover -s scripts/tests
 ```
 
-Local verification passed 175 Swift tests and 3 dictionary-generator tests on 2026-10-12. Test success does not establish cross-app compatibility; the [manual matrix](docs/compatibility.md) records that separately. GitHub Actions checks builds and tests on macOS for pushes and pull requests. Python 3 is needed only for dictionary tooling and its tests; the app has no Python runtime dependency.
+Local verification passed 175 Swift tests and 12 Python tooling tests (3 dictionary-generator and 9 packaging checks) on 2026-10-13. Test success does not establish cross-app compatibility; the [manual matrix](docs/compatibility.md) records that separately. GitHub Actions checks builds, tests, and a universal preview DMG on macOS for pushes and pull requests. Python 3 is needed only for development and release tooling; the app has no Python runtime dependency.
 
 For a locally built app bundle that macOS can list in Privacy & Security:
 
