@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Private security or privacy report
+    url: https://github.com/ywdagency/typeswitch/security/advisories/new
+    about: Report possible exposure of private text or unsafe access privately.

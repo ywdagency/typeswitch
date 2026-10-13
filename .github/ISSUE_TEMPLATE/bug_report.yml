@@ -1,0 +1,38 @@
+name: Bug report
+description: Report correction, permission, or app compatibility problems using synthetic text.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use synthetic text only. Do not include credentials, private typed text, learned words, or unreviewed diagnostics.
+        For security or privacy defects, use [private vulnerability reporting](https://github.com/ywdagency/typeswitch/security/advisories/new).
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: macOS version, TypeSwitch commit, target app name and version.
+      placeholder: macOS 15.x, TypeSwitch commit abc1234, TextEdit
+    validations:
+      required: true
+  - type: input
+    id: layouts
+    attributes:
+      label: Keyboard layouts and permissions
+      description: Enabled layouts, active layout, and the permission status shown in TypeSwitch.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction with synthetic text
+      description: Include the field type, example text, and actions that trigger the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual result
+      description: Describe text changes, caret position, and whether the keyboard layout switched.
+    validations:
+      required: true

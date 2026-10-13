@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: swift-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: macos-15
@@ -20,3 +24,5 @@ jobs:
         run: swift --version
       - name: Run automated tests
         run: swift test
+      - name: Build release executables
+        run: swift build --configuration release

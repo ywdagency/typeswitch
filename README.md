@@ -1,5 +1,7 @@
 # TypeSwitch
 
+[![Swift verification](https://github.com/ywdagency/typeswitch/actions/workflows/ci.yml/badge.svg)](https://github.com/ywdagency/typeswitch/actions/workflows/ci.yml)
+
 A native macOS menu bar utility that corrects words typed with the wrong keyboard layout. Built with Swift 6, SwiftUI, AppKit, CoreGraphics, and Accessibility APIs, with all text processing on the Mac.
 
 > [!WARNING]
@@ -39,7 +41,7 @@ swift build
 swift test
 ```
 
-The publication snapshot passed 121 automated tests on 2026-10-12. Test success does not establish cross-app compatibility; the [manual matrix](docs/compatibility.md) records that separately.
+Local verification passed 124 automated tests on 2026-10-12. Test success does not establish cross-app compatibility; the [manual matrix](docs/compatibility.md) records that separately. GitHub Actions checks builds and tests on macOS for pushes and pull requests.
 
 For a locally built app bundle that macOS can list in Privacy & Security:
 
@@ -50,13 +52,17 @@ open ~/Applications/TypeSwitch.app
 
 The script installs a development build to `~/Applications/TypeSwitch.app`, replacing a previous development copy at that path. It uses a local Apple Development signing identity when available and ad-hoc signing otherwise. It does not notarize or upload the app.
 
-Grant Input Monitoring and Accessibility only if you intend to test the utility. `Control+Option+Space` is the default pause/resume shortcut. Use `Open Permission Setup` in the menu for the system permission panes. See [testing](docs/testing.md) for the controlled test host and refusal checks.
+Grant Input Monitoring and Accessibility only if you intend to test the utility. Settings → General has a separate `Enable…` action for each missing permission; each requests access and opens the corresponding macOS page. The menu exposes the same actions. If TypeSwitch is absent from a permission list, use `Show TypeSwitch in Finder`, then add that app with `+` in System Settings. Permission status refreshes when you return to TypeSwitch. `Control+Option+Space` is the default pause/resume shortcut. See [testing](docs/testing.md) for the controlled test host and refusal checks.
 
 ## Privacy and limitations
 
 The app has no network client, telemetry, cloud account, or runtime dictionary download. It keeps a short current-word buffer in memory. Confirmed learned words and settings stay in local UserDefaults; optional local diagnostics contain redacted decision and control metadata. The dictionary regeneration script downloads public upstream data only when a developer explicitly runs it.
 
 The project does not claim universal editor support. Secure fields, terminal-like contexts, ignored apps, stale input, and ambiguous words are refused. Manual testing of permission behavior, browser fields, and caret preservation is still in progress. See [security reporting](SECURITY.md) for reporting a possible data exposure.
+
+## Contributing and reporting issues
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development checks, dictionary changes, and compatibility reports. Use the [issue templates](https://github.com/ywdagency/typeswitch/issues/new/choose) with synthetic example text. Report possible privacy or security defects through [private vulnerability reporting](https://github.com/ywdagency/typeswitch/security/advisories/new), following [SECURITY.md](SECURITY.md). Recent changes are recorded in the [changelog](CHANGELOG.md).
 
 ## Author and licensing
 
