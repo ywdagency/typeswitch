@@ -7,6 +7,10 @@ A native macOS menu bar utility that corrects words typed with the wrong keyboar
 > [!WARNING]
 > Experimental developer preview. Automated tests cover the core logic and simulated text controls; the manual cross-app compatibility matrix is incomplete. Do not rely on it for important text. This repository distributes source, not a notarized application release.
 
+## Installation
+
+The release workflow prepares signed DMGs for [GitHub Releases](https://github.com/ywdagency/typeswitch/releases), with a universal app for Apple silicon and Intel Macs running macOS 15 or newer. No notarized binary release is available yet; use the local source build below for now. Once published, installation is opening the DMG, dragging TypeSwitch into Applications, and granting Input Monitoring and Accessibility. See [installation notes](docs/installation.md) and the [release preparation workflow](docs/distribution.md).
+
 ## What it does
 
 When a dictionary-backed word such as `ghbdtn` is typed with the US English layout, TypeSwitch can replace it with `привет` and switch the input source. It supports English, Russian, and Ukrainian layouts, refuses ambiguous candidates, and lets the user pause correction or ignore individual apps.
@@ -15,7 +19,7 @@ Russian recognition includes inflected forms validated by bundled Hunspell rules
 
 The menu bar app includes language settings, a configurable pause/resume shortcut, local learned corrections, and immediate Esc undo for the most recent correction. Esc restores the original word and input source while preserving the delimiter. A successful Esc undo immediately saves a permanent exception for that exact spelling in its original layout, without an additional prompt. Exceptions stay on this Mac and can be removed in Settings → Exceptions.
 
-Known uppercase abbreviations are protected in their source language. Capitalization alone does not prevent correction: `LFKMIT` still becomes `ДАЛЬШЕ`. Unlisted abbreviations can be added as local exceptions, which match both the layout and letter case.
+One curated dictionary protects known uppercase abbreviations in their source language and recognizes them on the wrong layout. For example, Russian `ГЫИ`, `ЫВ`, and `ЫВШ` become `USB`, `SD`, and `SDI`; Ukrainian `ГІИ`, `ІВ`, and `ІВШ` produce the same results. Recognition requires uppercase input consistent with the reported source layout, a valid abbreviation target, and no competing dictionary target or valid source word. Capitalization alone does not prevent correction: `LFKMIT` still becomes `ДАЛЬШЕ`. Unlisted abbreviations can be added as local exceptions, which match both the layout and letter case.
 
 ## Engineering focus
 
@@ -46,7 +50,7 @@ swift test
 python3 -m unittest discover -s scripts/tests
 ```
 
-Local verification passed 150 Swift tests and 3 dictionary-generator tests on 2026-10-12. Test success does not establish cross-app compatibility; the [manual matrix](docs/compatibility.md) records that separately. GitHub Actions checks builds and tests on macOS for pushes and pull requests. Python 3 is needed only for dictionary tooling and its tests; the app has no Python runtime dependency.
+Local verification passed 175 Swift tests and 3 dictionary-generator tests on 2026-10-12. Test success does not establish cross-app compatibility; the [manual matrix](docs/compatibility.md) records that separately. GitHub Actions checks builds and tests on macOS for pushes and pull requests. Python 3 is needed only for dictionary tooling and its tests; the app has no Python runtime dependency.
 
 For a locally built app bundle that macOS can list in Privacy & Security:
 

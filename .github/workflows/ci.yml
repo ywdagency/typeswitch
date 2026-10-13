@@ -26,5 +26,7 @@ jobs:
         run: swift test
       - name: Test dictionary generator
         run: python3 -m unittest discover -s scripts/tests
+      - name: Check packaging scripts
+        run: bash -n scripts/build-app.sh scripts/build-dev-app.sh scripts/build-release.sh
       - name: Build release executables
         run: swift build --configuration release

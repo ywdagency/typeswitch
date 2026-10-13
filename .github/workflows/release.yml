@@ -1,0 +1,127 @@
+name: Prepare signed release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Unused release version (X.Y.Z)'
+        required: true
+        default: '0.1.0'
+        type: string
+      build_number:
+        description: 'Increasing positive build number'
+        required: true
+        default: '1'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: signed-release
+  cancel-in-progress: false
+
+jobs:
+  package:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      RELEASE_BUILD: ${{ inputs.build_number }}
+      NOTARYTOOL_PROFILE: typeswitch-release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate release inputs and unused tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$RELEASE_BUILD" =~ ^[1-9][0-9]*$ ]]
+          test -s "docs/releases/$RELEASE_VERSION.md"
+          tags="$(git ls-remote --tags origin "refs/tags/v$RELEASE_VERSION")"
+          if [[ -n "$tags" ]]; then
+            echo 'Release tag already exists.' >&2
+            exit 1
+          fi
+          # Any existing release also prevents replacing its assets on a retry.
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq '.[].tag_name' > "$RUNNER_TEMP/release-tags"
+          if grep -Fxq "v$RELEASE_VERSION" "$RUNNER_TEMP/release-tags"; then
+            echo 'Release already exists.' >&2
+            exit 1
+          fi
+      - name: Verify source
+        run: |
+          set -euo pipefail
+          swift test
+          python3 -m unittest discover -s scripts/tests
+          bash -n scripts/build-app.sh scripts/build-dev-app.sh scripts/build-release.sh
+      - name: Configure temporary signing keychain
+        env:
+          NOTARYTOOL_KEYCHAIN: ${{ runner.temp }}/typeswitch-signing.keychain-db
+          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          NOTARY_API_KEY_P8: ${{ secrets.NOTARY_API_KEY_P8 }}
+          NOTARY_API_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          NOTARY_API_ISSUER_ID: ${{ secrets.NOTARY_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          echo "NOTARYTOOL_KEYCHAIN=$NOTARYTOOL_KEYCHAIN" >> "$GITHUB_ENV"
+          for name in MACOS_CERTIFICATE_P12_BASE64 MACOS_CERTIFICATE_PASSWORD MACOS_SIGNING_IDENTITY NOTARY_API_KEY_P8 NOTARY_API_KEY_ID NOTARY_API_ISSUER_ID; do
+            if [[ -z "${!name}" ]]; then
+              echo "Missing required Actions secret: $name" >&2
+              exit 1
+            fi
+          done
+          [[ "$MACOS_SIGNING_IDENTITY" == 'Developer ID Application:'* ]]
+          keychain_password="$(openssl rand -hex 32)"
+          echo "::add-mask::$keychain_password"
+          security create-keychain -p "$keychain_password" "$NOTARYTOOL_KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$NOTARYTOOL_KEYCHAIN"
+          security unlock-keychain -p "$keychain_password" "$NOTARYTOOL_KEYCHAIN"
+          security list-keychains -d user -s "$NOTARYTOOL_KEYCHAIN"
+          umask 077
+          python3 - <<'PY'
+          import base64, os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          certificate = root / 'typeswitch-signing.p12'
+          key = root / 'typeswitch-notary.p8'
+          encoded = ''.join(os.environ['MACOS_CERTIFICATE_P12_BASE64'].split())
+          certificate.write_bytes(base64.b64decode(encoded, validate=True))
+          key.write_text(os.environ['NOTARY_API_KEY_P8'])
+          certificate.chmod(0o600)
+          key.chmod(0o600)
+          PY
+          security import "$RUNNER_TEMP/typeswitch-signing.p12" -k "$NOTARYTOOL_KEYCHAIN" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$NOTARYTOOL_KEYCHAIN" > /dev/null
+          xcrun notarytool store-credentials "$NOTARYTOOL_PROFILE" --keychain "$NOTARYTOOL_KEYCHAIN" --key "$RUNNER_TEMP/typeswitch-notary.p8" --key-id "$NOTARY_API_KEY_ID" --issuer "$NOTARY_API_ISSUER_ID"
+          rm -f "$RUNNER_TEMP/typeswitch-signing.p12" "$RUNNER_TEMP/typeswitch-notary.p8"
+      - name: Build and notarize universal DMG
+        env:
+          CODE_SIGN_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        run: ./scripts/build-release.sh "$RELEASE_VERSION" "$RELEASE_BUILD"
+      - name: Create draft prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "v$RELEASE_VERSION" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --draft --prerelease --title "TypeSwitch $RELEASE_VERSION" \
+            --notes-file "docs/releases/$RELEASE_VERSION.md" \
+            "dist/TypeSwitch-$RELEASE_VERSION-macOS-universal.dmg" \
+            "dist/TypeSwitch-$RELEASE_VERSION-macOS-universal.dmg.sha256"
+      - name: Remove signing credentials
+        if: always()
+        env:
+          NOTARYTOOL_KEYCHAIN: ${{ runner.temp }}/typeswitch-signing.keychain-db
+        run: |
+          security delete-keychain "$NOTARYTOOL_KEYCHAIN" || true
+          rm -f "$RUNNER_TEMP/typeswitch-signing.p12" "$RUNNER_TEMP/typeswitch-notary.p8"

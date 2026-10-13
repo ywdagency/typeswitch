@@ -4,13 +4,19 @@
 
 ### Fixed
 
+- Recognize `what's` in the bundled English dictionary so `црфеэы` corrects at a word boundary, including title case and trailing punctuation.
+
+- Serialize text replacement and layout switching with a bounded input queue; replay continued typing in order with the refreshed layout. Remove the 250 ms real-input suppression window and recheck freshness atomically before capture. Regression tests cover typing during fallback deletion/insertion, modifiers, queue limits, cancellation, and undo key releases; the user reported one missing contraction in a Codex fast-typing sample, with broader real-app verification still pending.
+
 - Set explicit modifiers and Unicode characters on bounded fallback keyboard events to preserve replacement case. The user confirmed `lfkmit` → `дальше` in Codex after the fix; broader manual verification remains incomplete.
 
 ### Changed
 
+- Prepare universal macOS DMGs with bundled license notices, checksums, installation instructions, and a manually triggered GitHub draft release workflow requiring Developer ID signing and notarization. Local preview packaging is available without release credentials; no notarized binary has been published yet.
+
 - Replace immediate Backspace undo with Esc, preserving the delimiter and restoring the source layout. Continued input and context changes cancel the opportunity.
 - Save a permanent, case-sensitive layout exception immediately after a successful Esc undo, without an additional prompt; manage exceptions in Settings → Exceptions.
-- Protect curated source-language uppercase abbreviations while retaining normal correction for uppercase words.
+- Use one curated dictionary for source-language uppercase abbreviation protection and wrong-layout recognition, including `USB`, `SD`, and `SDI`, while retaining normal correction for uppercase words and refusing competing targets or valid source words.
 
 - Recognize Russian inflected forms using bundled Hunspell suffix rules and flagged bases, including `rjgbhjdfybtv` → `копированием`, while protecting valid English and ambiguous Russian/Ukrainian candidates.
 - Separate Input Monitoring and Accessibility setup actions request the selected permission and open its matching System Settings pane.
