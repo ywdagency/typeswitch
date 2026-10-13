@@ -27,7 +27,7 @@ jobs:
       - name: Test packaging and dictionary tooling
         run: python3 -m unittest discover -s scripts/tests
       - name: Check packaging scripts
-        run: bash -n scripts/build-app.sh scripts/build-dev-app.sh scripts/build-release.sh
+        run: bash -n scripts/build-app.sh scripts/build-dev-app.sh scripts/build-release.sh scripts/lib/notarization.sh
       - name: Build release executables
         run: swift build --configuration release
       - name: Build and verify preview DMG

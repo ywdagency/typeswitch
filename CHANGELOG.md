@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Retry Apple ticket retrieval at most three times after stapler error 68, including transient CloudKit connection failures, while retaining all signature, ticket validation, and Gatekeeper checks. Invalid or revoked ticket errors fail immediately.
+
 - Recognize `what's` in the bundled English dictionary so `црфеэы` corrects at a word boundary, including title case and trailing punctuation.
 
 - Serialize text replacement and layout switching with a bounded input queue; replay continued typing in order with the refreshed layout. Remove the 250 ms real-input suppression window and recheck freshness atomically before capture. Regression tests cover typing during fallback deletion/insertion, modifiers, queue limits, cancellation, and undo key releases; the user reported one missing contraction in a Codex fast-typing sample, with broader real-app verification still pending.

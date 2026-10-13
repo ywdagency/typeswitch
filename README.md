@@ -50,7 +50,7 @@ swift test
 python3 -m unittest discover -s scripts/tests
 ```
 
-Local verification passed 175 Swift tests and 12 Python tooling tests (3 dictionary-generator and 9 packaging checks) on 2026-10-13. Test success does not establish cross-app compatibility; the [manual matrix](docs/compatibility.md) records that separately. GitHub Actions checks builds, tests, and a universal preview DMG on macOS for pushes and pull requests. Python 3 is needed only for development and release tooling; the app has no Python runtime dependency.
+Local verification passed 175 Swift tests and 15 Python tooling tests (3 dictionary-generator and 12 packaging checks) on 2026-10-13. Test success does not establish cross-app compatibility; the [manual matrix](docs/compatibility.md) records that separately. GitHub Actions checks builds, tests, and a universal preview DMG on macOS for pushes and pull requests. Python 3 is needed only for development and release tooling; the app has no Python runtime dependency.
 
 For a locally built app bundle that macOS can list in Privacy & Security:
 
