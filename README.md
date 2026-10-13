@@ -5,11 +5,13 @@
 A native macOS menu bar utility that corrects words typed with the wrong keyboard layout. Built with Swift 6, SwiftUI, AppKit, CoreGraphics, and Accessibility APIs, with all text processing on the Mac.
 
 > [!WARNING]
-> Experimental developer preview. Automated tests cover the core logic and simulated text controls; the manual cross-app compatibility matrix is incomplete. Do not rely on it for important text. A signed, notarized release candidate is being tested as a private draft; no binary release has been published yet.
+> Experimental developer preview. Automated tests cover the core logic and simulated text controls; the manual cross-app compatibility matrix is incomplete. Do not rely on it for important text. Version 0.1.0 is available as a signed, notarized prerelease.
 
 ## Installation
 
-The release workflow prepares signed DMGs for [GitHub Releases](https://github.com/ywdagency/typeswitch/releases), with a universal app for Apple silicon and Intel Macs running macOS 15 or newer. The 0.1.0 release candidate passed Developer ID signing, Apple notarization, and Gatekeeper checks and remains an unpublished draft. Until publication, use the local source build below. Installation from a release DMG is dragging TypeSwitch into Applications and granting Input Monitoring and Accessibility. See [installation notes](docs/installation.md) and the [release preparation workflow](docs/distribution.md).
+**[Download TypeSwitch 0.1.0 for macOS](https://github.com/ywdagency/typeswitch/releases/download/v0.1.0/TypeSwitch-0.1.0-macOS-universal.dmg)** — universal app for Apple silicon and Intel Macs running macOS 15 or newer. No Xcode or Python is needed to run it.
+
+Open the DMG, drag TypeSwitch into Applications, then open the installed app and grant Input Monitoring and Accessibility through Settings → General. The app is signed with Developer ID, notarized by Apple, and passed Gatekeeper checks. See [release notes](https://github.com/ywdagency/typeswitch/releases/tag/v0.1.0), the [SHA-256 checksum](https://github.com/ywdagency/typeswitch/releases/download/v0.1.0/TypeSwitch-0.1.0-macOS-universal.dmg.sha256), and [installation instructions](docs/installation.md). The [distribution guide](docs/distribution.md) covers building release packages.
 
 ## What it does
 

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.1.0 — 2026-10-13
+
+Published the first signed, notarized universal macOS DMG as an experimental prerelease (build 2). See [release notes and downloads](https://github.com/ywdagency/typeswitch/releases/tag/v0.1.0).
+
 ### Fixed
 
 - Retry Apple ticket retrieval at most three times after stapler error 68, including transient CloudKit connection failures, while retaining all signature, ticket validation, and Gatekeeper checks. Invalid or revoked ticket errors fail immediately.
@@ -16,7 +20,7 @@
 
 - Verify release DMG contents, source revision, resources, license notices, signatures, and notarization before uploading assets. CI also builds and checks an ad-hoc universal image. Allow explicit updates of unpublished draft candidates while refusing existing tags and published releases; refresh installation instructions for signed builds.
 
-- Prepare universal macOS DMGs with bundled license notices, checksums, installation instructions, and a manually triggered GitHub draft release workflow requiring Developer ID signing and notarization. Local preview packaging is available without release credentials; no notarized binary has been published yet.
+- Prepare universal macOS DMGs with bundled license notices, checksums, installation instructions, and a manually triggered GitHub draft release workflow requiring Developer ID signing and notarization. Local preview packaging is available without release credentials.
 
 - Replace immediate Backspace undo with Esc, preserving the delimiter and restoring the source layout. Continued input and context changes cancel the opportunity.
 - Save a permanent, case-sensitive layout exception immediately after a successful Esc undo, without an additional prompt; manage exceptions in Settings → Exceptions.

@@ -1,6 +1,6 @@
 # GitHub distribution
 
-The repository prepares universal macOS 15+ DMGs with an Applications shortcut, installation notes, bundled dictionary attribution and license texts, and a SHA-256 checksum. Binary artifacts and signing material stay out of Git. No notarized release has been published yet.
+The repository prepares universal macOS 15+ DMGs with an Applications shortcut, installation notes, bundled dictionary attribution and license texts, and a SHA-256 checksum. Binary artifacts and signing material stay out of Git. The signed, notarized [0.1.0 build 2 prerelease](https://github.com/ywdagency/typeswitch/releases/tag/v0.1.0) was published on 2026-10-13.
 
 ## Local packaging check
 
@@ -46,4 +46,4 @@ Before publishing the draft, download the assets through a browser on a clean Ma
 
 The first signed [GitHub workflow run](https://github.com/ywdagency/typeswitch/actions/runs/38344410461) completed successfully and created the unpublished 0.1.0 build 1 candidate. Apple accepted both the app ZIP and DMG. The initial app submission took about 32 minutes; the image submission then completed in under a minute. Workflow credentials were removed successfully.
 
-On 2026-10-13, the candidate downloaded through the GitHub CLI passed local checksum, app/image signature and ticket validation, Gatekeeper assessment, architecture, metadata, resource, attribution, and installation-shortcut checks. This did not launch or install the app and does not establish a clean-Mac browser-download result, permission onboarding, Intel execution, or broader editor compatibility. Build 2 refreshes the packaged instructions and runs the reusable content verifier before replacing the unpublished candidate.
+On 2026-10-13, the candidate downloaded through the GitHub CLI passed local checksum, app/image signature and ticket validation, Gatekeeper assessment, architecture, metadata, resource, attribution, and installation-shortcut checks. The final [build 2 workflow](https://github.com/ywdagency/typeswitch/actions/runs/38384066006) passed, and its downloaded DMG passed the same reusable verifier before publication. Build 2 refreshes the packaged instructions. These checks did not launch or install the app and do not establish a clean-Mac browser-download result, permission onboarding, Intel execution, or broader editor compatibility.
