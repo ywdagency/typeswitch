@@ -80,6 +80,12 @@ def run(*args: str) -> str:
     return result.stdout + result.stderr
 
 
+def validate_ticket(path: Path) -> None:
+    helper = Path(__file__).resolve().parent / "lib/notarization.sh"
+    run("bash", "-c", 'set -euo pipefail; source "$1"; stapler_with_retry validate "$2"',
+        "typeswitch-verification", str(helper), str(path))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("dmg", type=Path)
@@ -94,7 +100,7 @@ def main() -> None:
         run("hdiutil", "verify", str(dmg))
         if not args.preview:
             run("codesign", "--verify", "--strict", str(dmg))
-            run("xcrun", "stapler", "validate", str(dmg))
+            validate_ticket(dmg)
             run("spctl", "--assess", "--type", "open", "--context", "context:primary-signature", str(dmg))
         with tempfile.TemporaryDirectory(prefix="typeswitch-image-check-") as mount:
             run("hdiutil", "attach", "-readonly", "-nobrowse", "-mountpoint", mount, str(dmg))
@@ -107,7 +113,7 @@ def main() -> None:
                     signature = run("codesign", "-dvvv", str(app))
                     if "Authority=Developer ID Application:" not in signature or "runtime" not in signature or "Timestamp=" not in signature:
                         raise VerificationError("Expected Developer ID signing, hardened runtime, and a secure timestamp.")
-                    run("xcrun", "stapler", "validate", str(app))
+                    validate_ticket(app)
                     run("spctl", "--assess", "--type", "execute", str(app))
             finally:
                 run("hdiutil", "detach", mount)

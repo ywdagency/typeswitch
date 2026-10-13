@@ -43,8 +43,8 @@ DMG_NAME="TypeSwitch-$VERSION-macOS-universal$SUFFIX.dmg"
 if [[ "$MODE" != --preview ]]; then
     ditto -c -k --keepParent "$APP_PATH" "$WORK_DIR/TypeSwitch.zip"
     xcrun notarytool submit "$WORK_DIR/TypeSwitch.zip" "${NOTARY_ARGS[@]}" --wait
-    staple_with_retry "$APP_PATH"
-    xcrun stapler validate "$APP_PATH"
+    stapler_with_retry staple "$APP_PATH"
+    stapler_with_retry validate "$APP_PATH"
     spctl --assess --type execute --verbose=2 "$APP_PATH"
 fi
 
@@ -59,8 +59,8 @@ hdiutil create -volname "TypeSwitch $VERSION" -srcfolder "$WORK_DIR/image" -form
 if [[ "$MODE" != --preview ]]; then
     codesign --sign "$CODE_SIGN_IDENTITY" --timestamp "$WORK_DIR/$DMG_NAME"
     xcrun notarytool submit "$WORK_DIR/$DMG_NAME" "${NOTARY_ARGS[@]}" --wait
-    staple_with_retry "$WORK_DIR/$DMG_NAME"
-    xcrun stapler validate "$WORK_DIR/$DMG_NAME"
+    stapler_with_retry staple "$WORK_DIR/$DMG_NAME"
+    stapler_with_retry validate "$WORK_DIR/$DMG_NAME"
     spctl --assess --type open --context context:primary-signature --verbose=2 "$WORK_DIR/$DMG_NAME"
 fi
 hdiutil verify "$WORK_DIR/$DMG_NAME"

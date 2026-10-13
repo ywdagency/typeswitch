@@ -30,7 +30,7 @@ NOTARYTOOL_PROFILE='typeswitch-notary' \
 ./scripts/build-release.sh 0.1.0 1
 ```
 
-The script signs with hardened runtime and a secure timestamp, submits an app ZIP to Apple, staples and validates the app ticket, builds and signs the DMG, submits it, staples and validates its ticket, and checks Gatekeeper acceptance before writing the final DMG and checksum to `dist/`. Ticket retrieval errors with stapler exit code 68 receive at most three attempts with 5 and 10 second delays. Other ticket errors stop immediately; notarization submissions are not retried automatically. Signature, ticket validation, and Gatekeeper checks remain mandatory. Failed checks stop packaging. Only this mode is suitable for a release asset. Build from the intended clean, reviewed commit; notarization uploads the built app and DMG to Apple and does not send user data.
+The script signs with hardened runtime and a secure timestamp, submits an app ZIP to Apple, staples and validates the app ticket, builds and signs the DMG, submits it, staples and validates its ticket, and checks Gatekeeper acceptance before writing the final DMG and checksum to `dist/`. Ticket retrieval errors during stapling or validation with stapler exit code 68 receive at most three attempts with 5 and 10 second delays. Other ticket errors stop immediately; notarization submissions are not retried automatically. Signature, ticket validation, and Gatekeeper checks remain mandatory. Failed checks stop packaging. Only this mode is suitable for a release asset. Build from the intended clean, reviewed commit; notarization uploads the built app and DMG to Apple and does not send user data.
 
 ## GitHub draft workflow
 
