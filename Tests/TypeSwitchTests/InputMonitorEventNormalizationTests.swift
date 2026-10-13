@@ -106,7 +106,7 @@ func eventFilterPassesModifiedEscapeAndInvalidatesUndoOnRealInput() throws {
 }
 
 @Test
-func markedSyntheticEventsDoNotCancelUndoAndEscapeWorksDuringGraceWindow() throws {
+func markedSyntheticEventsDoNotCancelUndoAndEscapeWorksImmediately() throws {
     let gate = CorrectionUndoEscapeGate()
     let monitor = InputMonitor(characterResolver: FakeKeyboardCharacterResolver(value: nil), undoEscapeGate: gate)
     let synthetic = try #require(CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(kVK_ANSI_A), keyDown: true))
@@ -114,7 +114,6 @@ func markedSyntheticEventsDoNotCancelUndoAndEscapeWorksDuringGraceWindow() throw
     gate.arm(expiresAt: .distantFuture) { true }
     #expect(monitor.handle(eventType: .keyDown, event: synthetic) != nil)
     #expect(monitor.latestEventSequence() == 0)
-    monitor.suppressSyntheticEvents()
     let escape = try #require(CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(kVK_Escape), keyDown: true))
     escape.flags = []
     #expect(monitor.handle(eventType: .keyDown, event: escape) == nil)
@@ -141,20 +140,6 @@ func normalizesWrongLayoutLetterPunctuationAsText() {
 func normalizesText() {
     let normalizer = InputEventNormalizer()
     #expect(normalizer.normalize(keyCode: UInt16(kVK_ANSI_G), characters: "g", flags: []) == .text("g"))
-}
-
-@Test
-func syntheticInputSuppressionUsesMarkerAndBoundedGraceWindow() {
-    let gate = SyntheticInputSuppressionGate()
-    let marker: Int64 = 123
-
-    #expect(gate.shouldSuppress(eventMarker: marker, syntheticMarker: marker, now: 10_000))
-    #expect(gate.shouldSuppress(eventMarker: 0, syntheticMarker: marker, now: 10_000) == false)
-
-    gate.suppress(forNanoseconds: 250, now: 10_000)
-
-    #expect(gate.shouldSuppress(eventMarker: 0, syntheticMarker: marker, now: 10_249))
-    #expect(gate.shouldSuppress(eventMarker: 0, syntheticMarker: marker, now: 10_250) == false)
 }
 
 @Test

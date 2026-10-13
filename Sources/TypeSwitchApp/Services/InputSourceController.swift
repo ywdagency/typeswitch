@@ -148,3 +148,15 @@ struct InputSourceController {
         return targetIdentifiers.contains(selectedIdentifier)
     }
 }
+
+/// Own selections are recorded synchronously, before their delayed macOS notification arrives.
+struct InputSourceChangeTracker {
+    private var currentIdentifier: String?
+
+    @discardableResult
+    mutating func observe(_ identifier: String?) -> Bool {
+        guard currentIdentifier != identifier else { return false }
+        currentIdentifier = identifier
+        return true
+    }
+}

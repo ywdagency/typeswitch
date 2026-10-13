@@ -48,6 +48,10 @@ struct LayoutInferenceEngine {
             return .ignore
         }
 
+        if let abbreviationDecision = abbreviationDecision(for: trimmed, currentLayout: currentLayout) {
+            return abbreviationDecision
+        }
+
         if let englishCyrillicDecision = englishCyrillicDecision(for: trimmed, currentLayout: currentLayout) {
             return englishCyrillicDecision
         }
@@ -119,6 +123,7 @@ struct LayoutInferenceEngine {
         guard isProtectedFromAutoCorrection(trimmed, currentLayout: currentLayout) == false,
               (2...48).contains(base.count),
               looksLikeStructuredToken(base) == false,
+              abbreviationDecision(for: base, currentLayout: currentLayout) == nil,
               base.rangeOfCharacter(from: Self.ukrainianOnlyLetters) == nil,
               dictionaryStore.lookup(base, currentLayout: currentLayout) == nil
         else {
@@ -172,7 +177,62 @@ struct LayoutInferenceEngine {
         let base = tokenSplitByTrailingPunctuation(token).base
         return exceptionStore?.contains(token, layout: currentLayout) == true
             || exceptionStore?.contains(base, layout: currentLayout) == true
-            || UppercaseAbbreviationPolicy.protects(base, layout: currentLayout)
+            || AbbreviationDictionary.contains(base, layout: currentLayout)
+    }
+
+    private func abbreviationDecision(
+        for token: String,
+        currentLayout: KeyboardLayout?
+    ) -> CorrectionDecision? {
+        let split = tokenSplitByTrailingPunctuation(token)
+        guard let currentLayout,
+              split.base.isEmpty == false,
+              split.base.unicodeScalars.allSatisfy({ CharacterSet.uppercaseLetters.contains($0) })
+        else {
+            return nil
+        }
+
+        let sourceLetters = currentLayout == .usEnglish ? Self.latinLetters
+            : Self.russianLetters.subtracting(
+                currentLayout == .russian ? Self.ukrainianOnlyLetters : Self.russianOnlyLetters
+            )
+        guard split.base.unicodeScalars.allSatisfy({ sourceLetters.contains($0) }) else {
+            return nil
+        }
+
+        let candidates = KeyboardLayout.allCases.filter { $0 != currentLayout }.map { target in
+            (layout: target, replacement: mapper.map(split.base, from: currentLayout, to: target))
+        }
+        guard candidates.contains(where: {
+            $0.replacement != split.base && AbbreviationDictionary.contains($0.replacement, layout: $0.layout)
+        }) else {
+            return nil
+        }
+
+        // Preserve source-word refusals, including words shared by the Cyrillic layouts.
+        if dictionaryStore.contains(split.base, in: currentLayout)
+            || AbbreviationDictionary.contains(split.base, layout: currentLayout)
+            || (currentLayout != .usEnglish
+                && (dictionaryStore.contains(split.base, in: .russian)
+                    || dictionaryStore.contains(split.base, in: .ukrainian))) {
+            return .ignore
+        }
+
+        // Ordinary dictionary words also compete with abbreviation targets.
+        let matches = candidates.filter {
+            $0.replacement != split.base
+                && (AbbreviationDictionary.contains($0.replacement, layout: $0.layout)
+                    || dictionaryStore.contains($0.replacement, in: $0.layout))
+        }
+        guard matches.count == 1, let match = matches.first else {
+            return .ignore
+        }
+        return .rewriteAndMaybeSwitch(
+            replacement: match.replacement + split.trailingPunctuation,
+            targetLayout: match.layout,
+            reason: "Detected a known uppercase abbreviation typed on the wrong layout.",
+            confidence: 0.98
+        )
     }
 
     private func confidenceForLettersOnlyToken(_ token: String) -> Double {

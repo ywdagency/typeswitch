@@ -23,7 +23,9 @@ final class LayoutCoordinator {
     private var hotkeyManager: HotkeyManager?
     private var bufferManager = BufferManager()
     private var languageSwitchEvidence = LanguageSwitchEvidenceTracker()
+    private var inputSourceChanges = InputSourceChangeTracker()
     private var autoCorrectionUndoTracker = AutoCorrectionUndoTracker()
+    private var inputObservationTask: Task<Void, Never>?
     private var inputSourceObservationTask: Task<Void, Never>?
     private var permissionObservationTask: Task<Void, Never>?
     private var workspaceObservationTask: Task<Void, Never>?
@@ -80,6 +82,7 @@ final class LayoutCoordinator {
 
         loadPersistedSettings()
         refreshInputSourceOptions()
+        inputSourceChanges.observe(inputSourceController.currentSourceIdentifier())
         startObservingInputSourceChanges()
         startObservingPermissionChanges()
         workspaceObservationTask = Task { @MainActor [weak self] in
@@ -121,6 +124,8 @@ final class LayoutCoordinator {
         } else {
             if wasReady && hasActivated {
                 inputMonitor.stop()
+                inputObservationTask?.cancel()
+                inputObservationTask = nil
                 _ = bufferManager.consume(.reset)
                 languageSwitchEvidence.reset()
                 invalidateCorrectionUndo()
@@ -342,8 +347,10 @@ final class LayoutCoordinator {
         if let undoTargetLayout, inputSourceController.currentLayout() != undoTargetLayout {
             invalidateCorrectionUndo()
         }
-        _ = bufferManager.consume(.reset)
-        languageSwitchEvidence.reset()
+        if inputSourceChanges.observe(inputSourceController.currentSourceIdentifier()) {
+            _ = bufferManager.consume(.reset)
+            languageSwitchEvidence.reset()
+        }
         inputMonitor.refreshKeyboardLayout()
         refreshInputSourceOptions()
         guard let layout = inputSourceController.currentLayout(),
@@ -355,12 +362,16 @@ final class LayoutCoordinator {
 
     private func startMonitoring() {
         diagnosticsLogger.logTrace("inputMonitor startRequested")
+        inputObservationTask?.cancel()
+        let (events, continuation) = AsyncStream<MonitoredInputEvent>.makeStream()
+        inputObservationTask = Task { @MainActor [weak self] in
+            for await event in events {
+                guard !Task.isCancelled, let self else { return }
+                self.consumeMonitoredEvent(event)
+            }
+        }
         inputMonitor.start(
-            eventHandler: { [weak self] monitoredEvent in
-                Task { @MainActor in
-                    self?.consumeMonitoredEvent(monitoredEvent)
-                }
-            },
+            eventHandler: { continuation.yield($0) },
             statusHandler: { [weak self] status in
                 Task { @MainActor in
                     self?.diagnosticsLogger.logTrace("inputMonitor status=\(status.rawValue)")
@@ -540,12 +551,20 @@ final class LayoutCoordinator {
             record(decision: .blocked(reason), request: request)
             appModel.statusMessage = reason.userFacingDescription
         case let .switchOnly(targetLayout, reason):
+            guard inputSourceController.currentLayout() == currentLayout,
+                  let focusIdentity,
+                  inputMonitor.beginRewrite(expectedSequence: correctionInputSequence, isContextCurrent: {
+                      focusIdentity.isCurrent()
+                  })
+            else { return }
+            defer { inputMonitor.finishRewrite() }
             if (currentLayout == .russian || currentLayout == .ukrainian),
                (targetLayout == .russian || targetLayout == .ukrainian),
                languageSwitchEvidence.confirms(target: targetLayout) == false {
                 record(decision: .ignore, request: request)
                 return
             }
+            guard inputMonitor.canContinueRewrite() else { return }
             let didSwitch = switchToLayout(
                 targetLayout,
                 preferredSourceID: preferredInputSourceID(for: targetLayout)
@@ -553,6 +572,16 @@ final class LayoutCoordinator {
             record(decision: evaluatedDecision, request: request)
             appModel.statusMessage = didSwitch ? reason : "Could not confirm the keyboard layout switch."
         case let .rewriteAndMaybeSwitch(replacement, targetLayout, reason, _):
+            guard inputSourceController.currentLayout() == currentLayout,
+                  let focusIdentity,
+                  inputMonitor.beginRewrite(expectedSequence: correctionInputSequence, isContextCurrent: {
+                      focusIdentity.isCurrent()
+                  })
+            else {
+                diagnosticsLogger.logTrace("autoFixSkipped reason=staleInputOrFocus")
+                return
+            }
+            defer { inputMonitor.finishRewrite() }
             if AXRewriteRoutingPolicy.requiresBoundedFallback(
                 bundleID: request.context.frontmostBundleID,
                 controlKind: request.context.controlKind,
@@ -585,6 +614,7 @@ final class LayoutCoordinator {
                 diagnosticsLogger.logTrace(
                     "rewriteState \(AXRewriteEngine.redactedLastWordRewriteState(in: element, observedToken: request.observedToken))"
                 )
+                guard inputMonitor.canContinueRewrite() else { return }
                 switch request.selectionMode {
                 case .selectedText:
                     try rewriteEngine.replaceSelectedText(in: element, replacement: replacement)
@@ -599,6 +629,7 @@ final class LayoutCoordinator {
                         )
                     )
                 }
+                guard inputMonitor.canContinueRewrite() else { return }
                 let didSwitch = switchToLayout(
                     targetLayout,
                     preferredSourceID: preferredInputSourceID(for: targetLayout)
@@ -674,7 +705,8 @@ final class LayoutCoordinator {
         reason: String,
         focusIdentity: FocusedInputIdentity?
     ) -> Bool {
-        guard request.source == .autoWordBoundary,
+        guard inputMonitor.canContinueRewrite(),
+              request.source == .autoWordBoundary,
               request.selectionMode == .lastWord,
               syntheticFallbackAllowed(for: request.context.frontmostBundleID),
               NSWorkspace.shared.frontmostApplication?.bundleIdentifier == request.context.frontmostBundleID,
@@ -693,7 +725,6 @@ final class LayoutCoordinator {
             return false
         }
 
-        inputMonitor.suppressSyntheticEvents()
         let modifierFlags = CGEventSource.flagsState(.combinedSessionState)
         diagnosticsLogger.logTrace(
             "syntheticFallback case input{\(RedactedTextCaseSummary.describe(observedToken))} replacement{\(RedactedTextCaseSummary.describe(replacement))} shift=\(modifierFlags.contains(.maskShift)) capsLock=\(modifierFlags.contains(.maskAlphaShift))"
@@ -702,7 +733,8 @@ final class LayoutCoordinator {
             observedToken: observedToken,
             replacement: replacement,
             trailingDelimiter: trailingDelimiter,
-            targetLayout: targetLayout
+            targetLayout: targetLayout,
+            canContinue: { [inputMonitor] in inputMonitor.canContinueRewrite() }
         ) else {
             diagnosticsLogger.logTrace("syntheticFallback result=refused bundle=\(request.context.frontmostBundleID)")
             return false
@@ -758,7 +790,14 @@ final class LayoutCoordinator {
             )
         )
         undoTargetLayout = targetLayout
-        inputMonitor.armCorrectionUndo(expiresAt: expiresAt, focusIdentity: focusIdentity)
+        guard inputMonitor.armCorrectionUndo(
+            expiresAt: expiresAt, expectedSequence: correctionInputSequence,
+            contextIsCurrent: { focusIdentity.isCurrent() }
+        ) else {
+            invalidateCorrectionUndo()
+            diagnosticsLogger.logTrace("correctionUndo candidate=stale")
+            return
+        }
         diagnosticsLogger.logTrace("correctionUndo candidate=armed")
     }
 
@@ -789,11 +828,19 @@ final class LayoutCoordinator {
             return
         }
 
+        guard let focusIdentity = candidate.focusIdentity,
+              inputMonitor.beginRewrite(expectedSequence: inputSequence, isContextCurrent: {
+                  focusIdentity.isCurrent()
+              })
+        else { return }
+        defer { inputMonitor.finishRewrite() }
+
         do {
             if AXRewriteRoutingPolicy.requiresBoundedFallback(
                 bundleID: candidate.bundleID, controlKind: snapshot.context.controlKind,
                 accessibilityRole: snapshot.element.role
             ) { throw AXElementError.unsupported }
+            guard inputMonitor.canContinueRewrite() else { return }
             try rewriteEngine.replaceLastWordAtCaret(
                 in: snapshot.element,
                 replacement: candidate.originalToken,
@@ -803,6 +850,7 @@ final class LayoutCoordinator {
                     element: snapshot.element
                 )
             )
+            guard inputMonitor.canContinueRewrite() else { return }
             let restoredLayout = switchToLayout(
                 candidate.sourceLayout,
                 preferredSourceID: preferredInputSourceID(for: candidate.sourceLayout)
@@ -812,7 +860,8 @@ final class LayoutCoordinator {
                 appModel.statusMessage = "Word restored, but the original keyboard layout could not be confirmed."
             }
         } catch {
-            guard syntheticFallbackAllowed(for: candidate.bundleID),
+            guard inputMonitor.canContinueRewrite(),
+                  syntheticFallbackAllowed(for: candidate.bundleID),
                   SyntheticTextFallbackRewriteEngine.canRecover(after: error),
                   switchToLayout(
                     candidate.sourceLayout,
@@ -822,12 +871,12 @@ final class LayoutCoordinator {
                 diagnosticsLogger.logTrace("correctionUndo result=failed bundle=\(candidate.bundleID)")
                 return
             }
-            inputMonitor.suppressSyntheticEvents()
             guard syntheticFallbackRewriteEngine.replaceLastToken(
                     observedToken: candidate.replacementToken,
                     replacement: candidate.originalToken,
                     trailingDelimiter: candidate.trailingDelimiter,
-                    targetLayout: candidate.sourceLayout
+                    targetLayout: candidate.sourceLayout,
+                    canContinue: { [inputMonitor] in inputMonitor.canContinueRewrite() }
                   )
             else {
                 diagnosticsLogger.logTrace("correctionUndo result=failed bundle=\(candidate.bundleID)")
@@ -859,6 +908,10 @@ final class LayoutCoordinator {
             preferredSourceID: preferredSourceID
         )
         if didSwitch {
+            if inputSourceChanges.observe(inputSourceController.currentSourceIdentifier()) {
+                _ = bufferManager.consume(.reset)
+                languageSwitchEvidence.reset()
+            }
             inputMonitor.refreshKeyboardLayout()
         }
         return didSwitch

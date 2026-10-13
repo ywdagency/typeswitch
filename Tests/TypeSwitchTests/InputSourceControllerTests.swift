@@ -122,3 +122,22 @@ private final class Locked<Value: Sendable>: @unchecked Sendable {
         return transform(&value)
     }
 }
+
+@Test
+func ownLayoutSwitchDoesNotResetTypingAgainWhenItsNotificationArrives() {
+    var changes = InputSourceChangeTracker()
+    let sources = [AppConstants.russianSourceID, AppConstants.usEnglishSourceID,
+                   AppConstants.usEnglishSourceID, AppConstants.usEnglishSourceID,
+                   AppConstants.ukrainianSourceID, AppConstants.russianSourceID]
+    // Own selection is recorded before replay; duplicate notifications leave the next word intact.
+    let resets = sources.map { changes.observe($0) }
+    #expect(resets == [true, true, false, false, true, true])
+}
+
+@Test
+func unavailableInputSourceStillInvalidatesTypingOnce() {
+    var changes = InputSourceChangeTracker()
+    let sources: [String?] = [AppConstants.usEnglishSourceID, nil, nil, AppConstants.usEnglishSourceID]
+    let resets = sources.map { changes.observe($0) }
+    #expect(resets == [true, true, false, true])
+}

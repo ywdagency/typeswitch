@@ -22,7 +22,6 @@ enum AppConstants {
     static let autoFixDelayNanoseconds: UInt64 = 60_000_000
     static let autoCorrectionUndoDelayNanoseconds: UInt64 = 30_000_000
     static let autoCorrectionUndoLifetime: TimeInterval = 3
-    static let syntheticEventSuppressionNanoseconds: UInt64 = 250_000_000
     static let learningCandidateLifetime: TimeInterval = 30
     static let minimumConfidence = 0.72
     static let syntheticEventMarker: Int64 = 0x545950455357

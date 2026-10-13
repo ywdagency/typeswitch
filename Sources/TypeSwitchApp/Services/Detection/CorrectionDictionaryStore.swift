@@ -404,7 +404,7 @@ struct CorrectionDictionaryStore {
         )
 
         let englishWords = [
-            "i", "i'm", "hello", "hey", "okay", "okey", "->", "us", "so", "thanks", "thank", "please", "yes", "no", "how", "what", "this", "that", "that's",
+            "i", "i'm", "hello", "hey", "okay", "okey", "->", "us", "so", "thanks", "thank", "please", "yes", "no", "how", "what", "what's", "this", "that", "that's",
             "today", "tomorrow", "yesterday", "now", "later", "soon", "can", "need", "good", "bad", "on",
             "why", "where", "when", "who", "which", "work", "works", "make", "add", "remove",
             "open", "close", "start", "stop", "restart", "check", "fix", "update", "save", "delete",

@@ -418,3 +418,36 @@ func refusesInvalidOrExistingLearningCandidate() {
     #expect(engine.learningCandidate(for: "qzxv", currentLayout: nil) == nil)
     #expect(engine.learningCandidate(for: "a", currentLayout: .usEnglish) == nil)
 }
+
+@Test(arguments: [
+    DictionaryLookupCase(input: "црфеэы", expected: "what's"),
+    DictionaryLookupCase(input: "Црфеэы", expected: "What's"),
+    DictionaryLookupCase(input: "црфеэы,", expected: "what's,")
+])
+func autoFixRecognizesWhatsContraction(testCase: DictionaryLookupCase) {
+    var buffer = BufferManager()
+    for character in testCase.input { _ = buffer.consume(.text(String(character))) }
+    let token = buffer.consume(.delimiter(" ")).completedToken
+    #expect(token == testCase.input)
+    let decision = LayoutInferenceEngine().inferCorrection(
+        for: token ?? "", currentLayout: .russian, requiresDictionaryMatch: true
+    )
+    guard case let .rewriteAndMaybeSwitch(replacement, targetLayout, _, confidence) = decision else {
+        Issue.record("Expected a dictionary-backed contraction correction, got \(decision)")
+        return
+    }
+    #expect(replacement == testCase.expected)
+    #expect(targetLayout == .usEnglish)
+    #expect(confidence == 0.98)
+}
+
+@Test
+func whatsContractionDoesNotWidenUnknownApostropheCorrections() {
+    let engine = LayoutInferenceEngine()
+    #expect(engine.inferCorrection(
+        for: "what's", currentLayout: .usEnglish, requiresDictionaryMatch: true
+    ) == .ignore)
+    #expect(engine.inferCorrection(
+        for: "црфеэя", currentLayout: .russian, requiresDictionaryMatch: true
+    ) == .ignore)
+}

@@ -13,11 +13,15 @@ protocol SyntheticTextFallbackRewriting {
         observedToken: String,
         replacement: String,
         trailingDelimiter: String,
-        targetLayout: KeyboardLayout
+        targetLayout: KeyboardLayout,
+        canContinue: () -> Bool
     ) -> Bool
 }
 
 struct SyntheticTextFallbackRewriteEngine: SyntheticTextFallbackRewriting {
+    var postEvent: (CGEvent) -> Void = { $0.post(tap: .cghidEventTap) }
+    var pause: (UInt32) -> Void = { usleep($0) }
+
     static func canRecover(after error: Error) -> Bool {
         guard let error = error as? AXElementError else { return false }
         switch error {
@@ -55,7 +59,8 @@ struct SyntheticTextFallbackRewriteEngine: SyntheticTextFallbackRewriting {
         observedToken: String,
         replacement: String,
         trailingDelimiter: String,
-        targetLayout: KeyboardLayout
+        targetLayout: KeyboardLayout,
+        canContinue: () -> Bool
     ) -> Bool {
         guard let plan = Self.plan(
             observedToken: observedToken,
@@ -77,18 +82,21 @@ struct SyntheticTextFallbackRewriteEngine: SyntheticTextFallbackRewriting {
             deletionEvents.append(events)
         }
 
-        usleep(40_000)
+        // Keep the operation comfortably inside the input queue's deadline before any deletion.
+        guard deletionEvents.count + insertionEvents.count <= 128, canContinue() else { return false }
         for events in deletionEvents {
-            for event in events { event.post(tap: .cghidEventTap) }
-            usleep(2_000)
+            guard canContinue() else { return false }
+            for event in events { postEvent(event) }
+            pause(2_000)
         }
 
-        usleep(8_000)
+        pause(8_000)
         for events in insertionEvents {
-            for event in events { event.post(tap: .cghidEventTap) }
-            usleep(2_000)
+            guard canContinue() else { return false }
+            for event in events { postEvent(event) }
+            pause(2_000)
         }
-        return true
+        return canContinue()
     }
 
     static func insertionEvents(for text: String, targetLayout: KeyboardLayout) -> [[CGEvent]]? {
