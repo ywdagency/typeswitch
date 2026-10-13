@@ -21,20 +21,22 @@ The current executable product name is `TypeSwitch`. For permission testing, pre
 
 ## Permission Setup
 
-Open TypeSwitch from `~/Applications/TypeSwitch.app` and request missing permissions from the app UI. If macOS does not surface the prompt reliably, open System Settings manually and grant:
+Open TypeSwitch from `~/Applications/TypeSwitch.app`. Settings → General shows a separate row for each permission. Click `Enable…` on a missing row to request only that permission and open its matching System Settings page. The status menu offers the same separate actions. Enable TypeSwitch in:
 
 - Privacy & Security -> Input Monitoring -> TypeSwitch
 - Privacy & Security -> Accessibility -> TypeSwitch
 
-The menu bar item includes `Open Permission Setup`. That window shows the exact missing permission and provides best-effort buttons for opening the Input Monitoring and Accessibility panes directly.
+Verify each action reaches its named page. Links are best effort; if macOS rejects a pane URL, TypeSwitch opens Privacy & Security. Input Monitoring explicitly requests access through `IOHIDRequestAccess`, as [recommended by Apple DTS](https://developer.apple.com/forums/thread/828052) when CoreGraphics and Accessibility access overlap.
 
-If Input Monitoring does not list TypeSwitch automatically, click `+` in that pane and choose `~/Applications/TypeSwitch.app`.
+If Input Monitoring does not list TypeSwitch automatically, click `Show TypeSwitch in Finder` in TypeSwitch, then use `+` in the macOS pane to add that exact app. The Finder action resolves the running bundle rather than assuming an installation path.
 
 The dev app should be signed with an Apple Development identity when available. Rebuilding with a different signing identity may require removing and re-adding TypeSwitch in Input Monitoring and Accessibility.
 
-After granting permissions, restart TypeSwitch before the first real correction test.
+Return to TypeSwitch after granting permissions and confirm both rows show `Allowed`. Status refreshes on app activation; `Check Again` provides a manual refresh. Confirm the diagnostic log shows `inputMonitor startRequested`, `eventTapCreated`, and `firstKeyDownObserved`. If macOS requires a relaunch, quit and reopen the same app bundle. Revoke one permission, return, and confirm correction stops and the missing row reappears. Real TCC transitions require manual verification; unit tests use a fake client and never grant, revoke, or reset real permissions.
 
-Open Settings and verify the About section reports at least 65,000 English and 175,000 Russian words. Confirm that the FrequencyWords and Hunspell attribution links open their corresponding source and license pages.
+On 2026-10-12, the signed development app's fresh launch reported both permission checks granted, created the event tap, and observed keyboard input. The user reported correction working in GPT and GPT Classic. This is a limited session result; it does not complete the controlled host or cross-app safety matrix. UI automation could not verify permission pane navigation because app selection timed out, so pane navigation and grant/revocation transitions remain pending.
+
+Open Settings and verify About shows the product description and source attribution without dictionary coverage counts. Confirm the FrequencyWords and Hunspell links open their source and license pages.
 
 ## Controlled Test Host
 

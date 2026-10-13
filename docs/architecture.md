@@ -20,6 +20,8 @@ TypeSwitch is a SwiftPM macOS 15+ application with an executable product target,
 
 ## Local state and presentation
 
+`PermissionsController` preflights keyboard-listening access and Accessibility trust. Settings and the status menu expose a separate action for each missing permission. Input Monitoring requests use the public `IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)` API to register the request, as [recommended by Apple DTS](https://developer.apple.com/forums/thread/828052). Each action opens its matching System Settings pane through `NSWorkspace`, with a general Privacy & Security fallback. The running app can be revealed in Finder for manual addition if macOS omits it from the list. Returning to TypeSwitch refreshes status; newly confirmed access starts monitoring, and detected revocation stops it and clears pending input state. Permission setup does not reset TCC or grant access automatically.
+
 `AppSettingsStore` stores language preferences and the pause shortcut. `AppPolicyStore` stores ignored-app identities. `LearnedCorrectionStore` persists only user-confirmed mappings. A safe learning candidate is held temporarily in memory and expires without being saved unless the user confirms it.
 
 `StatusItemController`, settings views, and the learned-words window expose those capabilities. `DiagnosticsLogger` records redacted decision/control metadata, never the typed token or replacement. See [privacy](privacy.md) for storage and permission details.

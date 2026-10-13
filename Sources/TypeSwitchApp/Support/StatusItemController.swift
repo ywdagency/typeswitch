@@ -81,8 +81,12 @@ final class StatusItemController: NSObject {
         menu.autoenablesItems = false
 
         if appModel.permissionState.isReadyForManualCorrection == false {
-            addMenuItem(title: "Grant Permissions", action: #selector(requestPermissions))
-            addMenuItem(title: "Open System Settings", action: #selector(openSystemSettings))
+            if appModel.permissionState.inputMonitoring != .granted {
+                addMenuItem(title: "Enable Input Monitoring…", action: #selector(requestInputMonitoring))
+            }
+            if appModel.permissionState.accessibility != .granted {
+                addMenuItem(title: "Enable Accessibility…", action: #selector(requestAccessibility))
+            }
             menu.addItem(.separator())
         }
 
@@ -130,12 +134,12 @@ final class StatusItemController: NSObject {
         }
     }
 
-    @objc private func requestPermissions() {
-        coordinator.requestPermissions()
+    @objc private func requestInputMonitoring() {
+        coordinator.requestPermission(.inputMonitoring)
     }
 
-    @objc private func openSystemSettings() {
-        PermissionSettingsOpener.openPrivacyAndSecurity()
+    @objc private func requestAccessibility() {
+        coordinator.requestPermission(.accessibility)
     }
 
     @objc private func toggleAutoFix() {

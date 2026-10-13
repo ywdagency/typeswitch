@@ -45,7 +45,7 @@ struct SettingsView: View {
             case .ignoredApps:
                 IgnoredAppsSettingsView(appModel: appModel, coordinator: coordinator)
             case .about:
-                AboutSettingsView(appModel: appModel)
+                AboutSettingsView()
             }
         }
         .frame(width: 680, height: 440)
@@ -58,17 +58,37 @@ private struct GeneralSettingsView: View {
 
     var body: some View {
         Form {
-            if appModel.permissionState.isReadyForManualCorrection == false {
-                Section("Permissions Required") {
-                    Text(appModel.permissionState.missingSummary)
-                        .foregroundStyle(.orange)
-
+            Section("Permissions") {
+                ForEach(RequiredPermission.allCases) { permission in
                     HStack {
-                        Button("Grant Permissions") { coordinator.requestPermissions() }
-                        Button("Open System Settings") { PermissionSettingsOpener.openPrivacyAndSecurity() }
-                        Button("Refresh") { coordinator.refreshPermissions() }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(permission.title)
+                            Text(permission.purpose)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if appModel.permissionState.status(for: permission) == .granted {
+                            Label("Allowed", systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        } else {
+                            Button("Enable…") { coordinator.requestPermission(permission) }
+                                .accessibilityLabel("Enable \(permission.title)")
+                        }
                     }
                 }
+                if appModel.permissionState.isReadyForManualCorrection == false {
+                    Text("Enable TypeSwitch on the page that opens. If it is missing, click + and add the app shown in Finder.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    HStack {
+                        Button("Show TypeSwitch in Finder") { PermissionSettingsOpener.revealApplication() }
+                        Button("Check Again") { coordinator.refreshPermissions() }
+                    }
+                }
+                Text("Text is processed only on this Mac.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Auto-Fix") {
@@ -220,17 +240,11 @@ private struct IgnoredAppRow: View {
 }
 
 private struct AboutSettingsView: View {
-    let appModel: AppModel
-
     var body: some View {
         Form {
             Section("TypeSwitch") {
                 Text("Private, local keyboard-layout correction for macOS.")
                     .foregroundStyle(.secondary)
-                LabeledContent("Dictionary coverage") {
-                    Text(appModel.dictionaryCoverageDescription)
-                        .foregroundStyle(.secondary)
-                }
             }
 
             Section("Dictionary Sources") {

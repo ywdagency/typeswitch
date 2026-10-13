@@ -1,5 +1,26 @@
 import Foundation
 
+enum RequiredPermission: String, CaseIterable, Identifiable {
+    case inputMonitoring
+    case accessibility
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .inputMonitoring: "Input Monitoring"
+        case .accessibility: "Accessibility"
+        }
+    }
+
+    var purpose: String {
+        switch self {
+        case .inputMonitoring: "Detects the keyboard layout while you type."
+        case .accessibility: "Corrects text in supported input fields."
+        }
+    }
+}
+
 struct PermissionState: Equatable {
     enum AccessStatus: String, CaseIterable, Codable {
         case granted
@@ -31,6 +52,13 @@ struct PermissionState: Equatable {
 
     var isReadyForManualCorrection: Bool {
         inputMonitoring == .granted && accessibility == .granted
+    }
+
+    func status(for permission: RequiredPermission) -> AccessStatus {
+        switch permission {
+        case .inputMonitoring: inputMonitoring
+        case .accessibility: accessibility
+        }
     }
 
     var missingPermissionNames: [String] {

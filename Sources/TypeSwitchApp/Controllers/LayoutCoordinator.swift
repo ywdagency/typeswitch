@@ -23,6 +23,7 @@ final class LayoutCoordinator {
     private var languageSwitchEvidence = LanguageSwitchEvidenceTracker()
     private var autoCorrectionUndoTracker = AutoCorrectionUndoTracker()
     private var inputSourceObservationTask: Task<Void, Never>?
+    private var permissionObservationTask: Task<Void, Never>?
     private var hasActivated = false
 
     init(
@@ -73,43 +74,59 @@ final class LayoutCoordinator {
         loadPersistedSettings()
         refreshInputSourceOptions()
         startObservingInputSourceChanges()
+        startObservingPermissionChanges()
 
+        installHotkeys()
         refreshPermissions()
         diagnosticsLogger.logTrace(
             "permissions inputMonitoring=\(appModel.permissionState.inputMonitoring.rawValue) accessibility=\(appModel.permissionState.accessibility.rawValue)"
         )
-        installHotkeys()
-
-        if appModel.permissionState.isReadyForManualCorrection {
-            startMonitoring()
-        } else {
-            appModel.operatingMode = .permissionsRequired
-            appModel.statusMessage = "Grant Input Monitoring and Accessibility to enable correction."
-        }
     }
 
     func refreshPermissions() {
-        let state = permissionsController.refreshState()
+        applyPermissionState(permissionsController.refreshState())
+    }
+
+    func requestPermission(_ permission: RequiredPermission) {
+        applyPermissionState(permissionsController.request(permission))
+        PermissionSettingsOpener.openSettings(for: permission)
+    }
+
+    private func applyPermissionState(_ state: PermissionState) {
+        let wasReady = appModel.permissionState.isReadyForManualCorrection
+        if state != appModel.permissionState {
+            diagnosticsLogger.logTrace("permissions inputMonitoring=\(state.inputMonitoring.rawValue) accessibility=\(state.accessibility.rawValue)")
+        }
         appModel.permissionState = state
         if state.isReadyForManualCorrection {
-            appModel.operatingMode = .ready
-            appModel.statusMessage = "TypeSwitch is ready. Manual correction and auto-fix are available in supported contexts."
+            if hasActivated && appModel.operatingMode != .monitoring {
+                startMonitoring()
+            } else if hasActivated == false {
+                appModel.operatingMode = .ready
+            }
+            appModel.statusMessage = "TypeSwitch is ready. Auto-fix is available in supported fields."
         } else {
+            if wasReady && hasActivated {
+                inputMonitor.stop()
+                _ = bufferManager.consume(.reset)
+                languageSwitchEvidence.reset()
+                autoCorrectionUndoTracker.invalidate()
+                appModel.pendingLearningCandidate = nil
+            }
             appModel.operatingMode = .permissionsRequired
             appModel.statusMessage = state.missingSummary
         }
     }
 
-    func requestPermissions() {
-        let updated = permissionsController.requestMissingPermissions(from: appModel.permissionState)
-        appModel.permissionState = updated
-        if updated.isReadyForManualCorrection {
-            appModel.operatingMode = .ready
-            appModel.statusMessage = "Permissions granted. TypeSwitch is now monitoring supported contexts."
-            startMonitoring()
-        } else {
-            appModel.operatingMode = .permissionsRequired
-            appModel.statusMessage = updated.missingSummary
+    private func startObservingPermissionChanges() {
+        guard permissionObservationTask == nil else { return }
+        permissionObservationTask = Task { @MainActor [weak self] in
+            for await _ in NotificationCenter.default.notifications(
+                named: NSApplication.didBecomeActiveNotification
+            ) {
+                guard let self else { return }
+                self.refreshPermissions()
+            }
         }
     }
 

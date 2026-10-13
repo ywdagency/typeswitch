@@ -1,6 +1,7 @@
 @preconcurrency import ApplicationServices
 import CoreGraphics
 import Foundation
+import IOKit.hidsystem
 
 protocol PermissionsClient {
     func preflightInputMonitoring() -> Bool
@@ -14,7 +15,9 @@ struct SystemPermissionsClient: PermissionsClient {
     }
 
     func requestInputMonitoring() -> Bool {
-        CGRequestListenEventAccess()
+        // Explicitly registers the Input Monitoring request even when AX trust
+        // already permits a CoreGraphics event tap.
+        IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
     }
 
     func isAccessibilityTrusted(prompt: Bool) -> Bool {
@@ -43,21 +46,17 @@ final class PermissionsController {
         )
     }
 
-    func requestMissingPermissions(from currentState: PermissionState) -> PermissionState {
-        let inputMonitoringStatus: PermissionState.AccessStatus
-        if currentState.inputMonitoring == .granted || client.preflightInputMonitoring() {
-            inputMonitoringStatus = .granted
-        } else {
-            inputMonitoringStatus = client.requestInputMonitoring() ? .granted : .needsUserAction
+    func request(_ permission: RequiredPermission) -> PermissionState {
+        var state = refreshState()
+        guard state.status(for: permission) != .granted else {
+            return state
         }
-
-        let accessibilityStatus: PermissionState.AccessStatus
-        if currentState.accessibility == .granted || client.isAccessibilityTrusted(prompt: false) {
-            accessibilityStatus = .granted
-        } else {
-            accessibilityStatus = client.isAccessibilityTrusted(prompt: true) ? .granted : .needsUserAction
+        switch permission {
+        case .inputMonitoring:
+            state.inputMonitoring = client.requestInputMonitoring() ? .granted : .needsUserAction
+        case .accessibility:
+            state.accessibility = client.isAccessibilityTrusted(prompt: true) ? .granted : .needsUserAction
         }
-
-        return PermissionState(inputMonitoring: inputMonitoringStatus, accessibility: accessibilityStatus)
+        return state
     }
 }
