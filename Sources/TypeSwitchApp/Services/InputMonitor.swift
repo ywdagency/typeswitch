@@ -120,6 +120,8 @@ struct InputEventNormalizer {
         }
 
         switch Int(keyCode) {
+        case kVK_Escape:
+            return flags.intersection([.maskShift, .maskAlternate]).isEmpty ? .escape : .reset
         case kVK_Delete:
             return .backspace
         case kVK_LeftArrow, kVK_RightArrow, kVK_UpArrow, kVK_DownArrow, kVK_Home, kVK_End, kVK_PageUp, kVK_PageDown:
@@ -176,6 +178,7 @@ final class InputMonitor: @unchecked Sendable {
     private let characterResolver: KeyboardCharacterResolving
     private let syntheticInputSuppressionGate: SyntheticInputSuppressionGate
     private let eventSequenceClock: InputEventSequenceClock
+    private let undoEscapeGate: CorrectionUndoEscapeGate
     private let processingQueue = DispatchQueue(label: AppConstants.inputMonitorQueueLabel)
     private let firstKeyEventLock = NSLock()
     private var didReportFirstKeyEvent = false
@@ -184,17 +187,20 @@ final class InputMonitor: @unchecked Sendable {
     private var eventTap: CFMachPort?
     private var runLoop: CFRunLoop?
     private var tapThread: Thread?
+    private var consumingEscape = false
 
     init(
         normalizer: InputEventNormalizer = InputEventNormalizer(),
         characterResolver: KeyboardCharacterResolving = SystemKeyboardCharacterResolver(),
         syntheticInputSuppressionGate: SyntheticInputSuppressionGate = SyntheticInputSuppressionGate(),
-        eventSequenceClock: InputEventSequenceClock = InputEventSequenceClock()
+        eventSequenceClock: InputEventSequenceClock = InputEventSequenceClock(),
+        undoEscapeGate: CorrectionUndoEscapeGate = CorrectionUndoEscapeGate()
     ) {
         self.normalizer = normalizer
         self.characterResolver = characterResolver
         self.syntheticInputSuppressionGate = syntheticInputSuppressionGate
         self.eventSequenceClock = eventSequenceClock
+        self.undoEscapeGate = undoEscapeGate
     }
 
     @MainActor
@@ -225,6 +231,7 @@ final class InputMonitor: @unchecked Sendable {
     }
 
     func stop() {
+        undoEscapeGate.invalidate()
         eventHandler = nil
         if let eventTap {
             CFMachPortInvalidate(eventTap)
@@ -246,8 +253,15 @@ final class InputMonitor: @unchecked Sendable {
         eventSequenceClock.current()
     }
 
+    func armCorrectionUndo(expiresAt: Date, focusIdentity: FocusedInputIdentity) {
+        undoEscapeGate.arm(expiresAt: expiresAt) { focusIdentity.isCurrent() }
+    }
+
+    func invalidateCorrectionUndo() { undoEscapeGate.invalidate() }
+
     private func runEventTapLoop() {
-        let mask = (1 << CGEventType.keyDown.rawValue)
+        let mask = [CGEventType.keyDown, .keyUp, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel]
+            .reduce(CGEventMask(0)) { $0 | (1 << $1.rawValue) }
         let callback: CGEventTapCallBack = { _, type, event, userInfo in
             guard let userInfo else {
                 return Unmanaged.passUnretained(event)
@@ -260,7 +274,7 @@ final class InputMonitor: @unchecked Sendable {
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
-            options: .listenOnly,
+            options: .defaultTap,
             eventsOfInterest: CGEventMask(mask),
             callback: callback,
             userInfo: UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
@@ -279,49 +293,74 @@ final class InputMonitor: @unchecked Sendable {
         CFRunLoopRun()
     }
 
-    private func handle(eventType: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
-        if eventType == .tapDisabledByTimeout, let eventTap {
-            CGEvent.tapEnable(tap: eventTap, enable: true)
+    func handle(eventType: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        if eventType == .tapDisabledByTimeout || eventType == .tapDisabledByUserInput {
+            undoEscapeGate.invalidate()
+            consumingEscape = false
+            deliver(.reset)
+            if let eventTap { CGEvent.tapEnable(tap: eventTap, enable: true) }
             return Unmanaged.passUnretained(event)
         }
 
-        guard eventType == .keyDown else {
+        if eventType == .keyUp {
+            if consumingEscape,
+               event.getIntegerValueField(.keyboardEventKeycode) == Int64(kVK_Escape) {
+                consumingEscape = false
+                return nil
+            }
             return Unmanaged.passUnretained(event)
         }
+        guard eventType == .keyDown else {
+            if [.leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel].contains(eventType) {
+                undoEscapeGate.invalidate()
+                deliver(.reset)
+            }
+            return Unmanaged.passUnretained(event)
+        }
+
+        let marker = event.getIntegerValueField(.eventSourceUserData)
+        guard marker != AppConstants.syntheticEventMarker else { return Unmanaged.passUnretained(event) }
+        let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
+        let flags = event.flags
+        if consumingEscape, keyCode == UInt16(kVK_Escape) { return nil }
+        let isBareEscape = keyCode == UInt16(kVK_Escape)
+            && flags.intersection([.maskCommand, .maskControl, .maskAlternate, .maskShift]).isEmpty
+        if isBareEscape, undoEscapeGate.claim() {
+            consumingEscape = true
+            deliver(.undoCorrection)
+            return nil
+        }
+        undoEscapeGate.invalidate()
 
         guard syntheticInputSuppressionGate.shouldSuppress(
-            eventMarker: event.getIntegerValueField(.eventSourceUserData),
+            eventMarker: marker,
             syntheticMarker: AppConstants.syntheticEventMarker
         ) == false else {
+            deliver(.reset)
             return Unmanaged.passUnretained(event)
         }
 
         reportFirstKeyDownIfNeeded()
 
-        let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
-        let flags = event.flags
         var length = 0
         event.keyboardGetUnicodeString(maxStringLength: 8, actualStringLength: &length, unicodeString: nil)
         var buffer = Array(repeating: UniChar(0), count: max(length, 1))
         event.keyboardGetUnicodeString(maxStringLength: buffer.count, actualStringLength: &length, unicodeString: &buffer)
         let fallbackCharacters = String(utf16CodeUnits: buffer, count: length)
 
-        if let normalized = normalizedEvent(
+        let normalized = normalizedEvent(
             keyCode: keyCode,
             fallbackCharacters: fallbackCharacters,
             flags: flags
-        ) {
-            processingQueue.async { [eventHandler, eventSequenceClock] in
-                eventHandler?(
-                    MonitoredInputEvent(
-                        sequence: eventSequenceClock.advance(),
-                        event: normalized
-                    )
-                )
-            }
-        }
+        ) ?? .reset
+        deliver(normalized)
 
         return Unmanaged.passUnretained(event)
+    }
+
+    private func deliver(_ event: NormalizedInputEvent) {
+        let monitoredEvent = MonitoredInputEvent(sequence: eventSequenceClock.advance(), event: event)
+        processingQueue.async { [eventHandler] in eventHandler?(monitoredEvent) }
     }
 
     private func reportFirstKeyDownIfNeeded() {

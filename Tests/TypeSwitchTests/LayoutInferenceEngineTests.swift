@@ -56,6 +56,23 @@ func autoFixIgnoresWordsMissingFromDictionary() {
 }
 
 @Test(arguments: [
+    DictionaryLookupCase(input: "lfkmit", expected: "дальше"),
+    DictionaryLookupCase(input: "Lfkmit", expected: "Дальше"),
+    DictionaryLookupCase(input: "LFKMIT", expected: "ДАЛЬШЕ")
+])
+func autoFixPreservesCaseForFurther(testCase: DictionaryLookupCase) {
+    let decision = LayoutInferenceEngine().inferCorrection(
+        for: testCase.input, currentLayout: .usEnglish, requiresDictionaryMatch: true
+    )
+    guard case let .rewriteAndMaybeSwitch(replacement, targetLayout, _, _) = decision else {
+        Issue.record("Expected a Russian dictionary correction, got \(decision)")
+        return
+    }
+    #expect(replacement == testCase.expected)
+    #expect(targetLayout == .russian)
+}
+
+@Test(arguments: [
     DictionaryLookupCase(input: "rjgbhjdfybtv", expected: "копированием"),
     DictionaryLookupCase(input: "Rjgbhjdfybtv", expected: "Копированием"),
     DictionaryLookupCase(input: "RJGBHJDFYBTV", expected: "КОПИРОВАНИЕМ"),

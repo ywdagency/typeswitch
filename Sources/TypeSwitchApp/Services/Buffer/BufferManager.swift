@@ -21,7 +21,7 @@ struct BufferManager {
             let completed = currentToken.isEmpty ? nil : currentToken
             currentToken = ""
             return BufferMutationOutcome(currentToken: currentToken, completedToken: completed)
-        case .navigation, .paste, .reset:
+        case .navigation, .paste, .reset, .escape, .undoCorrection:
             currentToken = ""
             return BufferMutationOutcome(currentToken: currentToken, completedToken: nil)
         }

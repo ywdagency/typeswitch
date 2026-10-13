@@ -57,6 +57,71 @@ func normalizesBackspace() {
 }
 
 @Test
+func normalizesEscapeWithoutTreatingItAsTextOrBackspace() {
+    let normalizer = InputEventNormalizer()
+    #expect(normalizer.normalize(keyCode: UInt16(kVK_Escape), characters: "\u{1b}", flags: []) == .escape)
+    #expect(normalizer.normalize(keyCode: UInt16(kVK_Escape), characters: nil, flags: .maskAlphaShift) == .escape)
+    #expect(normalizer.normalize(keyCode: UInt16(kVK_Escape), characters: nil, flags: .maskShift) == .reset)
+    #expect(normalizer.normalize(keyCode: UInt16(kVK_Escape), characters: nil, flags: .maskCommand) == nil)
+}
+
+@Test
+func eventFilterConsumesOnlyEligibleEscapeIncludingReleaseAndRepeat() throws {
+    let gate = CorrectionUndoEscapeGate()
+    let monitor = InputMonitor(characterResolver: FakeKeyboardCharacterResolver(value: nil), undoEscapeGate: gate)
+    let down = try #require(CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(kVK_Escape), keyDown: true))
+    let up = try #require(CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(kVK_Escape), keyDown: false))
+    down.flags = []
+    up.flags = []
+    #expect(monitor.handle(eventType: .keyDown, event: down) != nil)
+    gate.arm(expiresAt: .distantFuture) { true }
+    #expect(monitor.handle(eventType: .keyDown, event: down) == nil)
+    #expect(monitor.handle(eventType: .keyDown, event: down) == nil)
+    #expect(monitor.handle(eventType: .keyUp, event: up) == nil)
+    #expect(monitor.handle(eventType: .keyDown, event: down) != nil)
+    #expect(monitor.handle(eventType: .keyUp, event: up) != nil)
+}
+
+@Test
+func eventFilterPassesModifiedEscapeAndInvalidatesUndoOnRealInput() throws {
+    let gate = CorrectionUndoEscapeGate()
+    let monitor = InputMonitor(characterResolver: FakeKeyboardCharacterResolver(value: nil), undoEscapeGate: gate)
+    let escape = try #require(CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(kVK_Escape), keyDown: true))
+    for modifier in [CGEventFlags.maskShift, .maskAlternate, .maskCommand, .maskControl] {
+        gate.arm(expiresAt: .distantFuture) { true }
+        escape.flags = modifier
+        #expect(monitor.handle(eventType: .keyDown, event: escape) != nil)
+        #expect(gate.claim() == false)
+    }
+    let backspace = try #require(CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(kVK_Delete), keyDown: true))
+    backspace.flags = []
+    gate.arm(expiresAt: .distantFuture) { true }
+    #expect(monitor.handle(eventType: .keyDown, event: backspace) != nil)
+    #expect(gate.claim() == false)
+    for type in [CGEventType.leftMouseDown, .rightMouseDown, .scrollWheel, .tapDisabledByTimeout] {
+        gate.arm(expiresAt: .distantFuture) { true }
+        #expect(monitor.handle(eventType: type, event: backspace) != nil)
+        #expect(gate.claim() == false)
+    }
+}
+
+@Test
+func markedSyntheticEventsDoNotCancelUndoAndEscapeWorksDuringGraceWindow() throws {
+    let gate = CorrectionUndoEscapeGate()
+    let monitor = InputMonitor(characterResolver: FakeKeyboardCharacterResolver(value: nil), undoEscapeGate: gate)
+    let synthetic = try #require(CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(kVK_ANSI_A), keyDown: true))
+    synthetic.setIntegerValueField(.eventSourceUserData, value: AppConstants.syntheticEventMarker)
+    gate.arm(expiresAt: .distantFuture) { true }
+    #expect(monitor.handle(eventType: .keyDown, event: synthetic) != nil)
+    #expect(monitor.latestEventSequence() == 0)
+    monitor.suppressSyntheticEvents()
+    let escape = try #require(CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(kVK_Escape), keyDown: true))
+    escape.flags = []
+    #expect(monitor.handle(eventType: .keyDown, event: escape) == nil)
+    #expect(monitor.latestEventSequence() == 1)
+}
+
+@Test
 func normalizesDelimiter() {
     let normalizer = InputEventNormalizer()
     #expect(normalizer.normalize(keyCode: UInt16(kVK_Space), characters: " ", flags: []) == .delimiter(" "))

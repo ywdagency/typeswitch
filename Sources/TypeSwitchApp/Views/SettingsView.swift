@@ -6,6 +6,7 @@ struct SettingsView: View {
     private enum Page: String, CaseIterable, Identifiable {
         case general
         case ignoredApps
+        case exceptions
         case about
 
         var id: Self { self }
@@ -14,6 +15,7 @@ struct SettingsView: View {
             switch self {
             case .general: "General"
             case .ignoredApps: "Ignored Apps"
+            case .exceptions: "Exceptions"
             case .about: "About"
             }
         }
@@ -22,6 +24,7 @@ struct SettingsView: View {
             switch self {
             case .general: "gearshape"
             case .ignoredApps: "nosign.app"
+            case .exceptions: "text.badge.minus"
             case .about: "info.circle"
             }
         }
@@ -44,11 +47,44 @@ struct SettingsView: View {
                 GeneralSettingsView(appModel: appModel, coordinator: coordinator)
             case .ignoredApps:
                 IgnoredAppsSettingsView(appModel: appModel, coordinator: coordinator)
+            case .exceptions:
+                CorrectionExceptionsSettingsView(appModel: appModel, coordinator: coordinator)
             case .about:
                 AboutSettingsView()
             }
         }
         .frame(width: 680, height: 440)
+    }
+}
+
+private struct CorrectionExceptionsSettingsView: View {
+    let appModel: AppModel
+    let coordinator: LayoutCoordinator
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Exceptions").font(.title2.weight(.semibold))
+            Text("Press Esc immediately after a correction to restore the word and save a permanent exception. Exceptions match the exact spelling and layout and stay on this Mac. Remove an exception here to allow correction again.")
+                .font(.caption).foregroundStyle(.secondary)
+            if appModel.correctionExceptions.isEmpty {
+                ContentUnavailableView("No Exceptions", systemImage: "text.badge.minus")
+            } else {
+                List(appModel.correctionExceptions) { entry in
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text(verbatim: entry.token).font(.body.monospaced())
+                            Text(entry.layout.displayName).font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button {
+                            coordinator.removeCorrectionException(id: entry.id)
+                        } label: { Image(systemName: "trash") }
+                        .buttonStyle(.borderless).help("Remove exception")
+                    }
+                }
+            }
+        }
+        .padding(20)
     }
 }
 

@@ -9,15 +9,18 @@ struct LayoutInferenceEngine {
     private let mapper: LayoutMapper
     private let dictionaryStore: CorrectionDictionaryStore
     private let minimumConfidence: Double
+    private let exceptionStore: CorrectionExceptionStore?
 
     init(
         mapper: LayoutMapper = LayoutMapper(),
         dictionaryStore: CorrectionDictionaryStore? = nil,
-        minimumConfidence: Double = AppConstants.minimumConfidence
+        minimumConfidence: Double = AppConstants.minimumConfidence,
+        exceptionStore: CorrectionExceptionStore? = nil
     ) {
         self.mapper = mapper
         self.dictionaryStore = dictionaryStore ?? CorrectionDictionaryStore(mapper: mapper)
         self.minimumConfidence = minimumConfidence
+        self.exceptionStore = exceptionStore
     }
 
     func inferCorrection(
@@ -27,6 +30,10 @@ struct LayoutInferenceEngine {
     ) -> CorrectionDecision {
         let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.isEmpty == false else {
+            return .ignore
+        }
+
+        if requiresDictionaryMatch, isProtectedFromAutoCorrection(trimmed, currentLayout: currentLayout) {
             return .ignore
         }
 
@@ -109,7 +116,8 @@ struct LayoutInferenceEngine {
         let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
         let base = tokenSplitByTrailingPunctuation(trimmed).base
 
-        guard (2...48).contains(base.count),
+        guard isProtectedFromAutoCorrection(trimmed, currentLayout: currentLayout) == false,
+              (2...48).contains(base.count),
               looksLikeStructuredToken(base) == false,
               base.rangeOfCharacter(from: Self.ukrainianOnlyLetters) == nil,
               dictionaryStore.lookup(base, currentLayout: currentLayout) == nil
@@ -157,6 +165,14 @@ struct LayoutInferenceEngine {
             language: language,
             source: "user-learned"
         )
+    }
+
+    private func isProtectedFromAutoCorrection(_ token: String, currentLayout: KeyboardLayout?) -> Bool {
+        guard let currentLayout else { return false }
+        let base = tokenSplitByTrailingPunctuation(token).base
+        return exceptionStore?.contains(token, layout: currentLayout) == true
+            || exceptionStore?.contains(base, layout: currentLayout) == true
+            || UppercaseAbbreviationPolicy.protects(base, layout: currentLayout)
     }
 
     private func confidenceForLettersOnlyToken(_ token: String) -> Double {

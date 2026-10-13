@@ -26,12 +26,18 @@ func diagnosticsStayRedacted() {
         decision: .rewriteAndMaybeSwitch(replacement: "привет", targetLayout: .russian, reason: "test", confidence: 0.9),
         request: request
     )
+    logger.logTrace(
+        "input{\(RedactedTextCaseSummary.describe("ghbdtn"))} replacement{\(RedactedTextCaseSummary.describe("ПРИВЕТ"))}"
+    )
 
     #expect(logger.events.count == 1)
     #expect(logger.events[0].frontmostBundleID == "com.apple.Safari")
     #expect(logger.events[0].blockedReason == nil)
     #expect(writer.lines.joined().contains("ghbdtn") == false)
     #expect(writer.lines.joined().contains("привет") == false)
+    #expect(writer.lines.joined().contains("ПРИВЕТ") == false)
+    #expect(writer.lines.joined().contains("input{lowercase=6 uppercase=0}"))
+    #expect(writer.lines.joined().contains("replacement{lowercase=0 uppercase=6}"))
 }
 
 private final class CapturingDiagnosticFileWriter: DiagnosticFileWriting {

@@ -9,6 +9,8 @@ enum NormalizedInputEvent: Equatable, Sendable {
     case text(String)
     case delimiter(Character)
     case backspace
+    case escape
+    case undoCorrection
     case navigation
     case paste
     case reset

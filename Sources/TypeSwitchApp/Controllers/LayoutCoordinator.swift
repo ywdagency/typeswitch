@@ -1,4 +1,5 @@
 import AppKit
+import CoreGraphics
 import Foundation
 
 @MainActor
@@ -10,6 +11,7 @@ final class LayoutCoordinator {
     private let inputMonitor: InputMonitor
     private let inferenceEngine: LayoutInferenceEngine
     private let learnedCorrectionStore: LearnedCorrectionStore
+    private let correctionExceptionStore: CorrectionExceptionStore
     private let learningCandidatePresentationPolicy: LearningCandidatePresentationPolicy
     private let diagnosticDictionaryStore: CorrectionDictionaryStore
     private let rewriteEngine: AXRewriteEngine
@@ -24,6 +26,8 @@ final class LayoutCoordinator {
     private var autoCorrectionUndoTracker = AutoCorrectionUndoTracker()
     private var inputSourceObservationTask: Task<Void, Never>?
     private var permissionObservationTask: Task<Void, Never>?
+    private var workspaceObservationTask: Task<Void, Never>?
+    private var undoTargetLayout: KeyboardLayout?
     private var hasActivated = false
 
     init(
@@ -34,6 +38,7 @@ final class LayoutCoordinator {
         inputMonitor: InputMonitor = InputMonitor(),
         inferenceEngine: LayoutInferenceEngine? = nil,
         learnedCorrectionStore: LearnedCorrectionStore = LearnedCorrectionStore(),
+        correctionExceptionStore: CorrectionExceptionStore = CorrectionExceptionStore(),
         learningCandidateWordValidator: LearningCandidateWordValidating = SystemLearningCandidateWordValidator(),
         diagnosticDictionaryStore: CorrectionDictionaryStore = CorrectionDictionaryStore(),
         rewriteEngine: AXRewriteEngine = AXRewriteEngine(),
@@ -49,11 +54,13 @@ final class LayoutCoordinator {
         self.focusedElementResolver = focusedElementResolver
         self.inputMonitor = inputMonitor
         self.learnedCorrectionStore = learnedCorrectionStore
+        self.correctionExceptionStore = correctionExceptionStore
         self.learningCandidatePresentationPolicy = LearningCandidatePresentationPolicy(
             validator: learningCandidateWordValidator
         )
         self.inferenceEngine = inferenceEngine ?? LayoutInferenceEngine(
-            dictionaryStore: CorrectionDictionaryStore(learnedStore: learnedCorrectionStore)
+            dictionaryStore: CorrectionDictionaryStore(learnedStore: learnedCorrectionStore),
+            exceptionStore: correctionExceptionStore
         )
         self.diagnosticDictionaryStore = diagnosticDictionaryStore
         self.rewriteEngine = rewriteEngine
@@ -75,6 +82,12 @@ final class LayoutCoordinator {
         refreshInputSourceOptions()
         startObservingInputSourceChanges()
         startObservingPermissionChanges()
+        workspaceObservationTask = Task { @MainActor [weak self] in
+            for await _ in NSWorkspace.shared.notificationCenter.notifications(named: NSWorkspace.didActivateApplicationNotification) {
+                self?.invalidateCorrectionUndo()
+                _ = self?.bufferManager.consume(.reset)
+            }
+        }
 
         installHotkeys()
         refreshPermissions()
@@ -110,7 +123,7 @@ final class LayoutCoordinator {
                 inputMonitor.stop()
                 _ = bufferManager.consume(.reset)
                 languageSwitchEvidence.reset()
-                autoCorrectionUndoTracker.invalidate()
+                invalidateCorrectionUndo()
                 appModel.pendingLearningCandidate = nil
             }
             appModel.operatingMode = .permissionsRequired
@@ -151,7 +164,7 @@ final class LayoutCoordinator {
         }
 
         appModel.autoFixEnabled = enabled
-        autoCorrectionUndoTracker.invalidate()
+        invalidateCorrectionUndo()
         appSettingsStore.setAutoFixEnabled(enabled)
         soundFeedbackPlayer.playAutoFixToggleClick()
         appModel.statusMessage = enabled
@@ -195,6 +208,17 @@ final class LayoutCoordinator {
     func removeLearnedCorrection(id: String) {
         learnedCorrectionStore.remove(id: id)
         refreshLearnedCorrections()
+    }
+
+    private func invalidateCorrectionUndo() {
+        autoCorrectionUndoTracker.invalidate()
+        inputMonitor.invalidateCorrectionUndo()
+        undoTargetLayout = nil
+    }
+
+    func removeCorrectionException(id: String) {
+        correctionExceptionStore.remove(id: id)
+        appModel.correctionExceptions = correctionExceptionStore.entries()
     }
 
     func setLayout(_ layout: KeyboardLayout, participates: Bool) {
@@ -274,6 +298,7 @@ final class LayoutCoordinator {
         appModel.dictionaryCoverageDescription = "\(diagnosticDictionaryStore.count(for: .english).formatted()) English · \(diagnosticDictionaryStore.count(for: .russian).formatted()) Russian · \(diagnosticDictionaryStore.count(for: .ukrainian).formatted()) Ukrainian words"
         refreshIgnoredApps()
         refreshLearnedCorrections()
+        appModel.correctionExceptions = correctionExceptionStore.entries()
     }
 
     private func refreshInputSourceOptions() {
@@ -314,6 +339,9 @@ final class LayoutCoordinator {
     }
 
     private func handleInputSourceChange() {
+        if let undoTargetLayout, inputSourceController.currentLayout() != undoTargetLayout {
+            invalidateCorrectionUndo()
+        }
         _ = bufferManager.consume(.reset)
         languageSwitchEvidence.reset()
         inputMonitor.refreshKeyboardLayout()
@@ -345,7 +373,7 @@ final class LayoutCoordinator {
     private func consumeMonitoredEvent(_ monitoredEvent: MonitoredInputEvent) {
         let event = monitoredEvent.event
         switch event {
-        case .navigation, .paste, .reset:
+        case .navigation, .paste, .reset, .escape, .undoCorrection:
             appModel.pendingLearningCandidate = nil
         case .text, .delimiter, .backspace:
             refreshLearningCandidate()
@@ -358,7 +386,7 @@ final class LayoutCoordinator {
             appModel.currentContextDescription = snapshot.context.summary
             appModel.focusedElementDiagnosticSummary = snapshot.diagnostic.summary
             guard appPolicyStore.mode(for: snapshot.context.frontmostBundleID) != .disabled else {
-                autoCorrectionUndoTracker.invalidate()
+                invalidateCorrectionUndo()
                 _ = bufferManager.consume(.reset)
                 return
             }
@@ -366,14 +394,13 @@ final class LayoutCoordinator {
             appModel.currentContextDescription = "No focused editable text input."
         }
 
-        if case .backspace = event,
-           let bundleID = focusedSnapshot?.context.frontmostBundleID,
-           let candidate = autoCorrectionUndoTracker.takeForImmediateBackspace(bundleID: bundleID) {
+        if let bundleID = focusedSnapshot?.context.frontmostBundleID,
+           let candidate = autoCorrectionUndoTracker.take(for: event, bundleID: bundleID) {
             _ = bufferManager.consume(.reset)
-            scheduleAutoCorrectionUndo(candidate)
+            scheduleAutoCorrectionUndo(candidate, inputSequence: monitoredEvent.sequence)
             return
         }
-        autoCorrectionUndoTracker.invalidate()
+        invalidateCorrectionUndo()
 
         let outcome = bufferManager.consume(event)
 
@@ -428,13 +455,15 @@ final class LayoutCoordinator {
             context: snapshot.context
         )
 
+        let focusIdentity = FocusedInputIdentity.current()
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: AppConstants.autoFixDelayNanoseconds)
             self?.perform(
                 request: request,
                 element: snapshot.element,
                 correctionInputSequence: inputSequence,
-                observedLayout: observedLayout
+                observedLayout: observedLayout,
+                focusIdentity: focusIdentity
             )
         }
     }
@@ -443,7 +472,8 @@ final class LayoutCoordinator {
         request: CorrectionRequest,
         element: AXElementProtocol,
         correctionInputSequence: UInt64,
-        observedLayout: KeyboardLayout
+        observedLayout: KeyboardLayout,
+        focusIdentity: FocusedInputIdentity?
     ) {
         guard AutoFixFreshnessPolicy.isFresh(
             scheduledSequence: correctionInputSequence,
@@ -539,7 +569,8 @@ final class LayoutCoordinator {
                     sourceLayout: currentLayout,
                     correctionInputSequence: correctionInputSequence,
                     evaluatedDecision: evaluatedDecision,
-                    reason: reason
+                    reason: reason,
+                    focusIdentity: focusIdentity
                 ) {
                     return
                 }
@@ -577,7 +608,8 @@ final class LayoutCoordinator {
                     replacement: replacement,
                     sourceLayout: currentLayout,
                     targetLayout: targetLayout,
-                    correctionInputSequence: correctionInputSequence
+                    correctionInputSequence: correctionInputSequence,
+                    focusIdentity: focusIdentity
                 )
                 record(decision: evaluatedDecision, request: request)
                 playCorrectionSoundIfEnabled()
@@ -593,7 +625,8 @@ final class LayoutCoordinator {
                     sourceLayout: currentLayout,
                     correctionInputSequence: correctionInputSequence,
                     evaluatedDecision: evaluatedDecision,
-                    reason: reason
+                    reason: reason,
+                    focusIdentity: focusIdentity
                 ) {
                     return
                 }
@@ -638,7 +671,8 @@ final class LayoutCoordinator {
         sourceLayout: KeyboardLayout,
         correctionInputSequence: UInt64,
         evaluatedDecision: CorrectionDecision,
-        reason: String
+        reason: String,
+        focusIdentity: FocusedInputIdentity?
     ) -> Bool {
         guard request.source == .autoWordBoundary,
               request.selectionMode == .lastWord,
@@ -660,6 +694,10 @@ final class LayoutCoordinator {
         }
 
         inputMonitor.suppressSyntheticEvents()
+        let modifierFlags = CGEventSource.flagsState(.combinedSessionState)
+        diagnosticsLogger.logTrace(
+            "syntheticFallback case input{\(RedactedTextCaseSummary.describe(observedToken))} replacement{\(RedactedTextCaseSummary.describe(replacement))} shift=\(modifierFlags.contains(.maskShift)) capsLock=\(modifierFlags.contains(.maskAlphaShift))"
+        )
         guard syntheticFallbackRewriteEngine.replaceLastToken(
             observedToken: observedToken,
             replacement: replacement,
@@ -676,7 +714,8 @@ final class LayoutCoordinator {
             replacement: replacement,
             sourceLayout: sourceLayout,
             targetLayout: targetLayout,
-            correctionInputSequence: correctionInputSequence
+            correctionInputSequence: correctionInputSequence,
+            focusIdentity: focusIdentity
         )
         record(decision: evaluatedDecision, request: request)
         appModel.statusMessage = reason
@@ -688,7 +727,8 @@ final class LayoutCoordinator {
         replacement: String,
         sourceLayout: KeyboardLayout,
         targetLayout: KeyboardLayout,
-        correctionInputSequence: UInt64
+        correctionInputSequence: UInt64,
+        focusIdentity: FocusedInputIdentity?
     ) {
         guard request.source == .autoWordBoundary,
               AutoFixFreshnessPolicy.isFresh(
@@ -697,11 +737,14 @@ final class LayoutCoordinator {
               ),
               let originalToken = request.observedToken,
               originalToken.isEmpty == false,
-              originalToken != replacement
+              originalToken != replacement,
+              let focusIdentity, focusIdentity.isCurrent()
         else {
+            diagnosticsLogger.logTrace("correctionUndo candidate=unavailable")
             return
         }
 
+        let expiresAt = Date().addingTimeInterval(AppConstants.autoCorrectionUndoLifetime)
         autoCorrectionUndoTracker.record(
             AutoCorrectionUndoCandidate(
                 originalToken: originalToken,
@@ -709,20 +752,30 @@ final class LayoutCoordinator {
                 sourceLayout: sourceLayout,
                 targetLayout: targetLayout,
                 bundleID: request.context.frontmostBundleID,
-                expiresAt: Date().addingTimeInterval(AppConstants.autoCorrectionUndoLifetime)
+                expiresAt: expiresAt,
+                trailingDelimiter: request.trailingDelimiter ?? "",
+                focusIdentity: focusIdentity
             )
         )
+        undoTargetLayout = targetLayout
+        inputMonitor.armCorrectionUndo(expiresAt: expiresAt, focusIdentity: focusIdentity)
+        diagnosticsLogger.logTrace("correctionUndo candidate=armed")
     }
 
-    private func scheduleAutoCorrectionUndo(_ candidate: AutoCorrectionUndoCandidate) {
+    private func scheduleAutoCorrectionUndo(_ candidate: AutoCorrectionUndoCandidate, inputSequence: UInt64) {
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: AppConstants.autoCorrectionUndoDelayNanoseconds)
-            self?.performAutoCorrectionUndo(candidate)
+            self?.performAutoCorrectionUndo(candidate, inputSequence: inputSequence)
         }
     }
 
-    private func performAutoCorrectionUndo(_ candidate: AutoCorrectionUndoCandidate) {
-        guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == candidate.bundleID,
+    func performAutoCorrectionUndo(_ candidate: AutoCorrectionUndoCandidate, inputSequence: UInt64) {
+        guard inputMonitor.latestEventSequence() == inputSequence,
+              candidate.expiresAt > Date(),
+              candidate.focusIdentity?.isCurrent() == true,
+              inputSourceController.currentLayout() == candidate.targetLayout,
+              appModel.permissionState.isReadyForManualCorrection,
+              NSWorkspace.shared.frontmostApplication?.bundleIdentifier == candidate.bundleID,
               appPolicyStore.mode(for: candidate.bundleID) != .disabled,
               let snapshot = resolveContext(),
               snapshot.context.frontmostBundleID == candidate.bundleID,
@@ -737,6 +790,10 @@ final class LayoutCoordinator {
         }
 
         do {
+            if AXRewriteRoutingPolicy.requiresBoundedFallback(
+                bundleID: candidate.bundleID, controlKind: snapshot.context.controlKind,
+                accessibilityRole: snapshot.element.role
+            ) { throw AXElementError.unsupported }
             try rewriteEngine.replaceLastWordAtCaret(
                 in: snapshot.element,
                 replacement: candidate.originalToken,
@@ -746,11 +803,14 @@ final class LayoutCoordinator {
                     element: snapshot.element
                 )
             )
-            _ = switchToLayout(
+            let restoredLayout = switchToLayout(
                 candidate.sourceLayout,
                 preferredSourceID: preferredInputSourceID(for: candidate.sourceLayout)
             )
             completeAutoCorrectionUndo(candidate, path: "ax")
+            if restoredLayout == false {
+                appModel.statusMessage = "Word restored, but the original keyboard layout could not be confirmed."
+            }
         } catch {
             guard syntheticFallbackAllowed(for: candidate.bundleID),
                   SyntheticTextFallbackRewriteEngine.canRecover(after: error),
@@ -766,7 +826,7 @@ final class LayoutCoordinator {
             guard syntheticFallbackRewriteEngine.replaceLastToken(
                     observedToken: candidate.replacementToken,
                     replacement: candidate.originalToken,
-                    trailingDelimiter: "",
+                    trailingDelimiter: candidate.trailingDelimiter,
                     targetLayout: candidate.sourceLayout
                   )
             else {
@@ -777,9 +837,15 @@ final class LayoutCoordinator {
         }
     }
 
-    private func completeAutoCorrectionUndo(_ candidate: AutoCorrectionUndoCandidate, path: String) {
+    func completeAutoCorrectionUndo(_ candidate: AutoCorrectionUndoCandidate, path: String) {
         diagnosticsLogger.logTrace("correctionUndo result=success path=\(path) bundle=\(candidate.bundleID)")
-        appModel.statusMessage = "Correction undone. The next occurrence can be corrected again."
+        invalidateCorrectionUndo()
+        let entry = CorrectionException(token: candidate.originalToken, layout: candidate.sourceLayout)
+        correctionExceptionStore.add(entry)
+        appModel.correctionExceptions = correctionExceptionStore.entries()
+        appModel.statusMessage = appModel.correctionExceptions.contains(entry)
+            ? "Correction undone. Saved an exception for this layout and letter case."
+            : "Correction undone, but the exception could not be saved."
     }
 
     private func syntheticFallbackAllowed(for bundleID: String) -> Bool {
@@ -899,7 +965,7 @@ final class LayoutCoordinator {
             CharacterSet(charactersIn: "абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ").contains($0)
         }.count
         let dictionaryHit = diagnosticDictionaryStore.lookup(token, currentLayout: currentLayout) != nil
-        return "length=\(token.count) latin=\(latinCount) russian=\(russianCount) dictionaryHit=\(dictionaryHit)"
+        return "length=\(token.count) latin=\(latinCount) russian=\(russianCount) \(RedactedTextCaseSummary.describe(token)) dictionaryHit=\(dictionaryHit)"
     }
 
     private func record(decision: CorrectionDecision, request: CorrectionRequest) {

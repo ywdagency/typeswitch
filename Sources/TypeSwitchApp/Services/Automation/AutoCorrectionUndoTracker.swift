@@ -7,6 +7,8 @@ struct AutoCorrectionUndoCandidate: Equatable {
     let targetLayout: KeyboardLayout
     let bundleID: String
     let expiresAt: Date
+    var trailingDelimiter: String = " "
+    var focusIdentity: FocusedInputIdentity? = nil
 }
 
 struct AutoCorrectionUndoTracker {
@@ -16,9 +18,10 @@ struct AutoCorrectionUndoTracker {
         self.candidate = candidate
     }
 
-    mutating func takeForImmediateBackspace(bundleID: String, now: Date = Date()) -> AutoCorrectionUndoCandidate? {
+    mutating func take(for event: NormalizedInputEvent, bundleID: String, now: Date = Date()) -> AutoCorrectionUndoCandidate? {
         defer { candidate = nil }
-        guard let candidate,
+        guard event == .undoCorrection,
+              let candidate,
               candidate.bundleID == bundleID,
               candidate.expiresAt > now
         else {

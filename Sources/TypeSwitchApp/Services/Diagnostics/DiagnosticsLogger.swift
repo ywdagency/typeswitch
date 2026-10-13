@@ -1,5 +1,13 @@
 import Foundation
 
+enum RedactedTextCaseSummary {
+    static func describe(_ text: String) -> String {
+        let lowercaseCount = text.unicodeScalars.filter { CharacterSet.lowercaseLetters.contains($0) }.count
+        let uppercaseCount = text.unicodeScalars.filter { CharacterSet.uppercaseLetters.contains($0) }.count
+        return "lowercase=\(lowercaseCount) uppercase=\(uppercaseCount)"
+    }
+}
+
 struct DiagnosticEvent: Equatable, Identifiable {
     enum DecisionKind: String, Equatable {
         case ignore

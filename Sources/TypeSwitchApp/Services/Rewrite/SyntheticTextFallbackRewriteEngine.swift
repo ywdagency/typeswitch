@@ -18,8 +18,6 @@ protocol SyntheticTextFallbackRewriting {
 }
 
 struct SyntheticTextFallbackRewriteEngine: SyntheticTextFallbackRewriting {
-    private let mapper = LayoutMapper()
-
     static func canRecover(after error: Error) -> Bool {
         guard let error = error as? AXElementError else { return false }
         switch error {
@@ -65,55 +63,74 @@ struct SyntheticTextFallbackRewriteEngine: SyntheticTextFallbackRewriting {
             trailingDelimiter: trailingDelimiter
         ) else { return false }
 
-        let physicalText = Self.physicalInsertionText(
+        guard let insertionEvents = Self.insertionEvents(
             for: plan.insertionText,
-            targetLayout: targetLayout,
-            mapper: mapper
-        )
-        let keyStrokes = physicalText.compactMap(keyStroke(for:))
-        guard keyStrokes.count == physicalText.count else { return false }
+            targetLayout: targetLayout
+        ) else { return false }
+        var deletionEvents: [[CGEvent]] = []
+        for _ in 0..<plan.deleteCount {
+            guard let events = Self.keyEvents(
+                keyCode: CGKeyCode(kVK_Delete),
+                requiresShift: false,
+                text: nil
+            ) else { return false }
+            deletionEvents.append(events)
+        }
 
         usleep(40_000)
-        for _ in 0..<plan.deleteCount {
-            postBackspace()
+        for events in deletionEvents {
+            for event in events { event.post(tap: .cghidEventTap) }
             usleep(2_000)
         }
 
         usleep(8_000)
-        for keyStroke in keyStrokes {
-            postKeyStroke(keyStroke)
+        for events in insertionEvents {
+            for event in events { event.post(tap: .cghidEventTap) }
             usleep(2_000)
         }
         return true
     }
 
-    private func postBackspace() {
-        postKey(virtualKey: CGKeyCode(kVK_Delete), keyDown: true, marked: true)
-        postKey(virtualKey: CGKeyCode(kVK_Delete), keyDown: false, marked: true)
-    }
-
-    private func postKey(virtualKey: CGKeyCode, keyDown: Bool, marked: Bool) {
-        let event = CGEvent(keyboardEventSource: nil, virtualKey: virtualKey, keyDown: keyDown)
-        if marked {
-            event?.setIntegerValueField(.eventSourceUserData, value: AppConstants.syntheticEventMarker)
+    static func insertionEvents(for text: String, targetLayout: KeyboardLayout) -> [[CGEvent]]? {
+        let physicalText = physicalInsertionText(for: text, targetLayout: targetLayout)
+        guard physicalText.count == text.count else { return nil }
+        var result: [[CGEvent]] = []
+        for (physicalCharacter, insertedCharacter) in zip(physicalText, text) {
+            guard let stroke = keyStroke(for: physicalCharacter),
+                  let events = keyEvents(
+                    keyCode: stroke.keyCode,
+                    requiresShift: stroke.requiresShift,
+                    text: String(insertedCharacter)
+                  )
+            else { return nil }
+            result.append(events)
         }
-        event?.post(tap: .cghidEventTap)
+        return result
     }
 
-    private func postKeyStroke(_ stroke: KeyStroke) {
+    private static func keyEvents(keyCode: CGKeyCode, requiresShift: Bool, text: String?) -> [CGEvent]? {
+        var result: [CGEvent] = []
         for keyDown in [true, false] {
             guard let event = CGEvent(
                 keyboardEventSource: nil,
-                virtualKey: stroke.keyCode,
+                virtualKey: keyCode,
                 keyDown: keyDown
-            ) else { continue }
-            if stroke.requiresShift { event.flags.insert(.maskShift) }
+            ) else { return nil }
+            // Both the physical modifiers and Unicode payload must describe the intended case.
+            event.flags = requiresShift ? .maskShift : []
+            if let text {
+                let utf16 = Array(text.utf16)
+                utf16.withUnsafeBufferPointer { buffer in
+                    event.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
+                }
+            }
             event.setIntegerValueField(.eventSourceUserData, value: AppConstants.syntheticEventMarker)
-            event.post(tap: .cghidEventTap)
+            result.append(event)
         }
+        return result
     }
 
-    private func keyStroke(for character: Character) -> KeyStroke? {
+    private static func keyStroke(for character: Character) -> KeyStroke? {
         let value = String(character)
         let shiftedSymbols: [Character: Character] = [
             "~": "`", "!": "1", "@": "2", "#": "3", "$": "4", "%": "5", "^": "6",

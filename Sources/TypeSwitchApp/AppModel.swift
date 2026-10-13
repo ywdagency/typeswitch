@@ -31,6 +31,7 @@ final class AppModel {
     var ignoredApps: [AppPolicy] = []
     var pendingLearningCandidate: PendingLearningCandidate?
     var learnedCorrections: [CorrectionDictionaryEntry] = []
+    var correctionExceptions: [CorrectionException] = []
     var diagnostics: [DiagnosticEvent] = []
 
     var permissionSummary: String {

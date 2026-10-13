@@ -13,7 +13,9 @@ When a dictionary-backed word such as `ghbdtn` is typed with the US English layo
 
 Russian recognition includes inflected forms validated by bundled Hunspell rules, such as `rjgbhjdfybtv` → `копированием`, even when that form is absent from the flat word list.
 
-The menu bar app includes language settings, a configurable pause/resume shortcut, local learned corrections, and immediate Backspace undo for the most recent verified correction. Learning requires explicit confirmation; it does not silently collect a personal dictionary.
+The menu bar app includes language settings, a configurable pause/resume shortcut, local learned corrections, and immediate Esc undo for the most recent correction. Esc restores the original word and input source while preserving the delimiter. A successful Esc undo immediately saves a permanent exception for that exact spelling in its original layout, without an additional prompt. Exceptions stay on this Mac and can be removed in Settings → Exceptions.
+
+Known uppercase abbreviations are protected in their source language. Capitalization alone does not prevent correction: `LFKMIT` still becomes `ДАЛЬШЕ`. Unlisted abbreviations can be added as local exceptions, which match both the layout and letter case.
 
 ## Engineering focus
 
@@ -44,7 +46,7 @@ swift test
 python3 -m unittest discover -s scripts/tests
 ```
 
-Local verification passed 130 Swift tests and 3 dictionary-generator tests on 2026-10-12. Test success does not establish cross-app compatibility; the [manual matrix](docs/compatibility.md) records that separately. GitHub Actions checks builds and tests on macOS for pushes and pull requests. Python 3 is needed only for dictionary tooling and its tests; the app has no Python runtime dependency.
+Local verification passed 150 Swift tests and 3 dictionary-generator tests on 2026-10-12. Test success does not establish cross-app compatibility; the [manual matrix](docs/compatibility.md) records that separately. GitHub Actions checks builds and tests on macOS for pushes and pull requests. Python 3 is needed only for dictionary tooling and its tests; the app has no Python runtime dependency.
 
 For a locally built app bundle that macOS can list in Privacy & Security:
 
@@ -59,7 +61,7 @@ Grant Input Monitoring and Accessibility only if you intend to test the utility.
 
 ## Privacy and limitations
 
-The app has no network client, telemetry, cloud account, or runtime dictionary download. It keeps a short current-word buffer in memory. Confirmed learned words and settings stay in local UserDefaults; optional local diagnostics contain redacted decision and control metadata. The dictionary regeneration script downloads public upstream data only when a developer explicitly runs it.
+The app has no network client, telemetry, cloud account, or runtime dictionary download. It keeps a short current-word buffer in memory. Confirmed learned words, exceptions, and settings stay in local UserDefaults; optional local diagnostics contain redacted decision and control metadata. The dictionary regeneration script downloads public upstream data only when a developer explicitly runs it.
 
 The project does not claim universal editor support. Secure fields, terminal-like contexts, ignored apps, stale input, and ambiguous words are refused. Manual testing of permission behavior, browser fields, and caret preservation is still in progress. See [security reporting](SECURITY.md) for reporting a possible data exposure.
 
