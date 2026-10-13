@@ -116,6 +116,34 @@ func builtInDictionaryHasBasicRussianCoverage() {
     #expect(store.lookup("ghbdsn") == nil)
 }
 
+@Test(arguments: [
+    "копирования", "копированию", "копированием", "копировании", "словарём", "словарями", "словарях",
+    "клавиатуры", "клавиатуре", "клавиатуру", "клавиатурой", "клавиатур", "клавиатурам", "клавиатурами", "клавиатурах",
+    "синхронизацией", "синхронизациями", "автоматического", "автоматическому", "автоматическими", "автоматических"
+])
+func dictionaryRecognizesRussianInflectedForms(word: String) {
+    let mapper = LayoutMapper()
+    let store = CorrectionDictionaryStore()
+    let token = mapper.mapToEnglish(word)
+
+    #expect(store.contains(word, in: .russian))
+    #expect(store.lookup(token, currentLayout: .usEnglish)?.correctToken == word)
+    #expect(store.lookup(token, currentLayout: .russian) == nil)
+    #expect(store.lookup(token, currentLayout: .ukrainian) == nil)
+}
+
+@Test
+func russianInflectionsDoNotLeakIntoCustomDictionariesOrOverrideEnglish() {
+    let store = CorrectionDictionaryStore(entries: [])
+    #expect(store.contains("копированием", in: .russian) == false)
+    #expect(store.lookup("rjgbhjdfybtv", currentLayout: .usEnglish) == nil)
+
+    let builtIn = CorrectionDictionaryStore()
+    #expect(builtIn.lookup("entity", currentLayout: .usEnglish) == nil)
+    #expect(builtIn.lookup("next", currentLayout: .usEnglish) == nil)
+    #expect(builtIn.lookup("fhrb", currentLayout: .usEnglish) == nil) // RU/UA арки.
+}
+
 @Test
 func builtInDictionaryHasExpandedEnglishCoverage() {
     let mapper = LayoutMapper()

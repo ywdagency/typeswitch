@@ -2,6 +2,7 @@
 from pathlib import Path
 from urllib.request import urlopen
 import re
+from russian_inflections import generate_resources
 
 ROOT = Path(__file__).resolve().parents[1]
 RESOURCE_DIR = ROOT / "Sources" / "TypeSwitchApp" / "Resources" / "FrequencyWords"
@@ -146,6 +147,8 @@ def main():
         )
         (RESOURCE_DIR / filename).write_text(HEADER + "\n".join(markers) + "\n", encoding="utf-8")
         print(f"{filename}: {len(markers)} language-specific frequency markers")
+
+    generate_resources(RESOURCE_DIR)
 
 
 if __name__ == "__main__":

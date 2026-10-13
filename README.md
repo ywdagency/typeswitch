@@ -11,6 +11,8 @@ A native macOS menu bar utility that corrects words typed with the wrong keyboar
 
 When a dictionary-backed word such as `ghbdtn` is typed with the US English layout, TypeSwitch can replace it with `привет` and switch the input source. It supports English, Russian, and Ukrainian layouts, refuses ambiguous candidates, and lets the user pause correction or ignore individual apps.
 
+Russian recognition includes inflected forms validated by bundled Hunspell rules, such as `rjgbhjdfybtv` → `копированием`, even when that form is absent from the flat word list.
+
 The menu bar app includes language settings, a configurable pause/resume shortcut, local learned corrections, and immediate Backspace undo for the most recent verified correction. Learning requires explicit confirmation; it does not silently collect a personal dictionary.
 
 ## Engineering focus
@@ -39,9 +41,10 @@ git clone https://github.com/ywdagency/typeswitch.git
 cd typeswitch
 swift build
 swift test
+python3 -m unittest discover -s scripts/tests
 ```
 
-Local verification passed 124 automated tests on 2026-10-12. Test success does not establish cross-app compatibility; the [manual matrix](docs/compatibility.md) records that separately. GitHub Actions checks builds and tests on macOS for pushes and pull requests.
+Local verification passed 130 Swift tests and 3 dictionary-generator tests on 2026-10-12. Test success does not establish cross-app compatibility; the [manual matrix](docs/compatibility.md) records that separately. GitHub Actions checks builds and tests on macOS for pushes and pull requests. Python 3 is needed only for dictionary tooling and its tests; the app has no Python runtime dependency.
 
 For a locally built app bundle that macOS can list in Privacy & Security:
 

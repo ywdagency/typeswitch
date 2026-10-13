@@ -8,6 +8,8 @@ TypeSwitch is a SwiftPM macOS 15+ application with an executable product target,
 
 `BufferManager` retains the active word and resets on ambiguous transitions such as navigation, paste, or context change. `LayoutMapper` converts physical keyboard mappings between supported English, Russian, and Ukrainian sources. `LayoutInferenceEngine` combines that mapping with bundled dictionary evidence and refuses ambiguous candidates. `LanguageSwitchEvidenceTracker` handles conservative Russian/Ukrainian language evidence across nearby words.
 
+`RussianInflectionDictionary` also recognizes Russian case forms through bundled Hunspell suffix rules and flagged base entries. It reverses one suffix transformation and requires the original base, its exact affix flag, and the rule's ending condition to match. This covers forms such as `копированием` without guessing endings or storing every expanded word. Known English source words stay protected, and newly recognized Russian forms do not override an ambiguous Ukrainian candidate. Recognition is limited to the bundled rules; irregular forms require explicit dictionary entries. Resources load once per process, with no runtime downloads or learning.
+
 `LayoutCoordinator` orchestrates the flow. `AutoFixFreshnessPolicy` requires the delimiter to remain the latest observed input before a delayed correction can run. `SafetyGateEvaluator` rejects unsafe or unsupported contexts before text mutation.
 
 ## Text replacement

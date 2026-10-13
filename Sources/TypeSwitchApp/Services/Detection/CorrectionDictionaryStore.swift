@@ -8,6 +8,7 @@ struct CorrectionDictionaryStore {
     private let learnedStore: LearnedCorrectionStore?
     private let customEntriesByLookupKey: [LookupKey: CorrectionDictionaryEntry]
     private let russianWords: SortedWordList
+    private let russianInflections: RussianInflectionDictionary
     private let englishWords: SortedWordList
     private let ukrainianWords: SortedWordList
     private let russianLanguageMarkers: SortedWordList
@@ -36,6 +37,7 @@ struct CorrectionDictionaryStore {
         if entries == nil {
             let wordSets = Self.cachedBuiltInWordSets
             self.russianWords = wordSets.russian
+            self.russianInflections = wordSets.russianInflections
             self.englishWords = wordSets.english
             self.ukrainianWords = wordSets.ukrainian
             self.russianLanguageMarkers = wordSets.russianMarkers
@@ -44,6 +46,7 @@ struct CorrectionDictionaryStore {
             self.trustedEnglishWords = wordSets.trustedEnglish
         } else {
             self.russianWords = SortedWordList(words: [])
+            self.russianInflections = RussianInflectionDictionary()
             self.englishWords = SortedWordList(words: [])
             self.ukrainianWords = SortedWordList(words: [])
             self.russianLanguageMarkers = SortedWordList(words: [])
@@ -101,14 +104,19 @@ struct CorrectionDictionaryStore {
         let russianCandidate = mapper.mapToRussian(token).lowercased()
         let englishCandidate = mapper.mapToEnglish(token).lowercased()
 
+        let exactRussianMatch = russianWords.contains(russianCandidate)
+        let inflectedRussianMatch = exactRussianMatch == false && russianInflections.contains(russianCandidate)
+            && (ukrainianWords.contains(mapper.map(token, from: .usEnglish, to: .ukrainian).lowercased()) == false
+                || (mapper.map(token, from: .usEnglish, to: .ukrainian).lowercased() == russianCandidate
+                    && frequencyDominantRussianUkrainianLayout(for: russianCandidate) == .russian))
         let russianMatch = russianCandidate != normalizedToken
-            && russianWords.contains(russianCandidate)
+            && (exactRussianMatch || inflectedRussianMatch)
             && (trustedRussianWords.contains(russianCandidate)
                 || englishWords.contains(normalizedToken) == false)
         let englishMatch = englishCandidate != normalizedToken
             && englishWords.contains(englishCandidate)
             && (trustedEnglishWords.contains(englishCandidate)
-                || russianWords.contains(normalizedToken) == false)
+                || contains(normalizedToken, in: .russian) == false)
 
         guard russianMatch != englishMatch else {
             return nil
@@ -212,7 +220,7 @@ struct CorrectionDictionaryStore {
         let word = token.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         switch layout {
         case .usEnglish: return englishWords.contains(word)
-        case .russian: return russianWords.contains(word)
+        case .russian: return russianWords.contains(word) || russianInflections.contains(word)
         case .ukrainian: return ukrainianWords.contains(word)
         }
     }
@@ -220,7 +228,7 @@ struct CorrectionDictionaryStore {
     func dominantRussianUkrainianLayout(for token: String) -> KeyboardLayout? {
         let word = token.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let russian = russianLanguageMarkers.contains(word) && ukrainianWords.contains(word) == false
-        let ukrainian = ukrainianLanguageMarkers.contains(word) && russianWords.contains(word) == false
+        let ukrainian = ukrainianLanguageMarkers.contains(word) && contains(word, in: .russian) == false
         guard russian != ukrainian else { return nil }
         return russian ? .russian : .ukrainian
     }
@@ -283,6 +291,7 @@ struct CorrectionDictionaryStore {
 
     private static func loadBuiltInWordSets() -> (
         russian: SortedWordList,
+        russianInflections: RussianInflectionDictionary,
         english: SortedWordList,
         ukrainian: SortedWordList,
         russianMarkers: SortedWordList,
@@ -454,6 +463,10 @@ struct CorrectionDictionaryStore {
 
         return (
             russian: russianWordList,
+            russianInflections: RussianInflectionDictionary(
+                baseLines: resourceWords(named: "russian-inflection-bases"),
+                ruleLines: resourceWords(named: "russian-inflection-rules")
+            ),
             english: englishWordList,
             ukrainian: ukrainianWordList,
             russianMarkers: russianMarkers,

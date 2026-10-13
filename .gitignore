@@ -13,7 +13,12 @@ dist/
 !.env.example
 *.p12
 *.p8
+*.pfx
+*.pem
+*.key
 *.mobileprovision
 *.keychain
 *.keychain-db
 artifacts/
+__pycache__/
+*.app/

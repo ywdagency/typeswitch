@@ -55,6 +55,46 @@ func autoFixIgnoresWordsMissingFromDictionary() {
     #expect(engine.inferCorrection(for: "asdf", requiresDictionaryMatch: true) == .ignore)
 }
 
+@Test(arguments: [
+    DictionaryLookupCase(input: "rjgbhjdfybtv", expected: "копированием"),
+    DictionaryLookupCase(input: "Rjgbhjdfybtv", expected: "Копированием"),
+    DictionaryLookupCase(input: "RJGBHJDFYBTV", expected: "КОПИРОВАНИЕМ"),
+    DictionaryLookupCase(input: "rjgbhjdfybtv,", expected: "копированием,")
+])
+func autoFixRecognizesRussianCaseForms(testCase: DictionaryLookupCase) {
+    let engine = LayoutInferenceEngine()
+    let decision = engine.inferCorrection(
+        for: testCase.input, currentLayout: .usEnglish, requiresDictionaryMatch: true
+    )
+    guard case let .rewriteAndMaybeSwitch(replacement, targetLayout, _, confidence) = decision else {
+        Issue.record("Expected a dictionary-backed Russian inflection, got \(decision)")
+        return
+    }
+    #expect(replacement == testCase.expected)
+    #expect(targetLayout == .russian)
+    #expect(confidence == 0.98)
+    #expect(engine.learningCandidate(for: testCase.input, currentLayout: .usEnglish) == nil)
+}
+
+@Test
+func russianCaseFormsPreserveRefusalsAndAlreadyValidWords() {
+    let engine = LayoutInferenceEngine()
+    let mapper = LayoutMapper()
+    for word in ["копированиеом", "работаом", "новыйого", "словариями", "копировнием"] {
+        #expect(engine.inferCorrection(
+            for: mapper.mapToEnglish(word), currentLayout: .usEnglish, requiresDictionaryMatch: true
+        ) == .ignore)
+    }
+    for token in ["entity", "next", "fhrb", "https://rjgbhjdfybtv.dev", "rjgbhjdfybtv@example.com"] {
+        #expect(engine.inferCorrection(
+            for: token, currentLayout: .usEnglish, requiresDictionaryMatch: true
+        ) == .ignore)
+    }
+    #expect(engine.inferCorrection(
+        for: "словарём", currentLayout: .russian, requiresDictionaryMatch: true
+    ) == .ignore)
+}
+
 @Test
 func dictionaryInferenceRespectsCurrentLayoutPair() {
     let engine = LayoutInferenceEngine()

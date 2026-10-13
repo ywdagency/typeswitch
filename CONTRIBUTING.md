@@ -8,6 +8,7 @@ Use macOS 15+ with Swift 6 and the macOS SDK. There are no external Swift packag
 
 ```sh
 swift test
+python3 -m unittest discover -s scripts/tests
 swift build --configuration release
 ./scripts/build-dev-app.sh
 ./scripts/build-test-host.sh
@@ -27,4 +28,4 @@ Use the bug-report template with the macOS version, app/version, active input la
 
 ## Dictionary data
 
-The bundled dictionaries are generated resources with separate licenses. Preserve their headers, [license texts](LICENSES/), and [source notices](docs/third-party-notices.md). Explain data changes separately from code changes. Run `scripts/update-frequency-dictionaries.py` only when intentionally regenerating data; it downloads upstream files and is not part of normal app startup or CI.
+The bundled dictionaries are generated resources with separate licenses. Preserve their headers, [license texts](LICENSES/), and [source notices](docs/third-party-notices.md). Explain data changes separately from code changes. Run `scripts/update-frequency-dictionaries.py` only when intentionally regenerating data; it downloads upstream files and is not part of normal app startup or CI. Russian inflection resources can be regenerated separately with `python3 scripts/russian_inflections.py`; their upstream revision and SHA-256 hashes are pinned. Python 3 is required for these developer tools and their tests, not for running the app.

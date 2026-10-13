@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Recognize Russian inflected forms using bundled Hunspell suffix rules and flagged bases, including `rjgbhjdfybtv` → `копированием`, while protecting valid English and ambiguous Russian/Ukrainian candidates.
 - Separate Input Monitoring and Accessibility setup actions request the selected permission and open its matching System Settings pane.
 - Input Monitoring setup explicitly registers the access request through `IOHIDRequestAccess`.
 - Settings can reveal the running app in Finder for manual addition to macOS permission lists.
